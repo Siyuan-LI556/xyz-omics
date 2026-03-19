@@ -1,11 +1,11 @@
 # %%
 import os.path
-
 import numpy as np
 import torch
-import torch.optim as optim
+#import torch.optim as optim
 import pyvista as pv
 from pykeops.torch import LazyTensor
+from sklearn.cluster import KMeans
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -74,7 +74,7 @@ X_max, _ = torch.max(X_orig, dim=0)
 X_orig = (X_orig - X_min) / (X_max - X_min)
 S = (X_orig, P_orig)
 
-# bandwidth_varifold = 0.10 # TODO : check dependency to M
+# bandwidth_varifold = 0.10 # check dependency to M
 base_sigma = 1.0  # Base bandwidth for varifold kernel, can be tuned based on data scale and desired smoothness.
 
 # %% Subsample data
@@ -84,25 +84,45 @@ bandwidth_varifold = base_sigma * (1 / M) ** (1 / 3)
 print(f"bandwidth_varifold set to {bandwidth_varifold:.4f} based on M={M} representative points.")
 print(f"Preparing to compress {N} brain cell points into {M} representative points...")
 
-# TODO: Implement more sophisticated subsampling strategies to better capture the spatial distribution and gene expression diversity of the original dataset. Random sampling may not be sufficient to preserve important biological patterns in the data.
+''' Subsample random
 indices = torch.randperm(N)[:M]
-# indices = torch.linespace(0, N - 1, M).long()
+
 X_hat = X_orig[indices].clone()
 P_hat = P_orig[indices].clone()
 
 X_hat.requires_grad_(True)
 P_hat.requires_grad_(True)
 S_hat = (X_hat, P_hat)
+'''
+#  Implement more sophisticated subsampling strategies to better capture the spatial distribution and gene expression
+#  diversity of the original dataset. Random sampling may not be sufficient to preserve important biological patterns in the data.
+
+# Subsample by K-means
+kmeans = KMeans(n_clusters=M, random_state=0)
+labels = kmeans.fit_predict(X_orig.cpu().numpy())
+centers = torch.tensor(kmeans.cluster_centers_, device=device)
+
+P_hat = torch.zeros((M, P_orig.shape[1]), device=device)
+
+for i in range(M):
+    mask = torch.tensor(labels == i, device=device)
+    if mask.sum() > 0:
+        P_hat[i] = P_orig[mask].mean(dim=0)
+
+X_hat = centers.clone().requires_grad_(True)
+P_hat = P_hat.clone().requires_grad_(True)
+S_hat = (X_hat, P_hat)
 
 # %% Set optimization parameters
-# TODO: Try other optimizers LBFGS
+
+'''optimizer Adam
 optimizer = optim.Adam([
     {'params': [X_hat], 'lr': 0.01},
     {'params': [P_hat], 'lr': 0.005}
 ])
 
 # TODO: Plot loss decreasing. Tune optimizer hyperparameters (learning rates, weight decay, etc.) to improve convergence and final results.
-epochs = 500
+epochs = 5000
 
 # %% Optimization loop
 print("Starting optimization loop...")
@@ -126,6 +146,43 @@ for epoch in range(epochs):
         X_hat.clamp_(min=0.0, max=1.0)
     if (epoch + 1) % 10 == 0:
         print(f"Epoch {epoch + 1:3d}/{epochs} | Varifold Loss: {loss.item():.6f}")
+'''
+# optimizers LBFGS
+optimiser = torch.optim.LBFGS(
+    [X_hat, P_hat],
+    lr=0.1,
+    max_iter=20,
+    history_size=10,
+    line_search_fn="strong_wolfe"
+)
+
+term0 = varifold_sp(S, S, bandwidth_varifold)
+
+def closure():
+    optimiser.zero_grad()
+
+    S_hat = (X_hat, P_hat)
+
+    term1 = varifold_sp(S_hat, S_hat, bandwidth_varifold)
+    term2 = varifold_sp(S, S_hat, bandwidth_varifold)
+    loss = term0 + term1 - 2*term2
+
+    loss.backward()
+    return loss
+
+epochs = 50
+loss_history = []
+print("Starting LBFGS optimization loop...")
+for epoch in range(epochs):
+    loss = optimiser.step(closure)
+
+    with torch.no_grad():
+        P_hat.clamp_(min=0)
+        X_hat.clamp_(min=0.0, max=1.0)
+
+    loss_history.append(loss.item())
+
+    print(f"[LBFGS] Epoch {epoch+1:3d}/{epochs} | Loss: {loss.item():.6f}")
 
 print("\nOptimization complete! Exporting ParaView format files...")
 
@@ -140,11 +197,11 @@ cloud_orig = pv.PolyData(x_orig_final)
 cloud_hat = pv.PolyData(x_hat_final)
 
 # TODO: Fix export : export all feature and/or new summary feature for visualization to check quality: e.g.
-cloud_orig.point_data["Gene_weight"] = Feature_BarSeq  # .sum(dim=1)
-cloud_hat.point_data["Gene_weight"] = p_hat_final  # .sum(dim=1)
+cloud_orig.point_data["Gene_weight"] = Feature_BarSeq#.sum(axis=1)
+cloud_hat.point_data["Gene_weight"] = p_hat_final#.sum(axis=1)
 
-file_orig = os.path.join(output_dir, "orig_1.2.vtp")
-file_hat = os.path.join(output_dir, "hat_1.2.vtp")
+file_orig = os.path.join(output_dir, "orig_1.4.vtp")
+file_hat = os.path.join(output_dir, "hat_1.4.vtp")
 
 cloud_orig.save(file_orig)
 cloud_hat.save(file_hat)
