@@ -4,7 +4,7 @@ import torch
 from src.config import M, BASE_SIGMA, LR, MAX_ITER, HISTORY_SIZE, EPOCHS, TOL, PATIENCE
 from src.io.loader import load_barseq
 from src.subsampling.kmeans import kmeans_subsample
-from src.losses.varifold import varifold_sp
+from src.subsampling.random import random_subsample
 from src.optim.LBFGS import optimize_lbfgs
 from src.io.vtk_export import export_vtp
 
