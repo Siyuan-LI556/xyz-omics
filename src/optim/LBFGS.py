@@ -1,9 +1,10 @@
 # src/optim/LBFGS.py
 import torch
+import time
 from src.losses.varifold import varifold_sp
 
 
-def optimize_lbfgs(S, X_hat, P_hat, bandwidth_varifold, lr, max_iter, history_size, epochs):
+def optimize_lbfgs(S, X_hat, P_hat, bandwidth_varifold, lr, max_iter, history_size, epochs, tol=1e-6, patience=5):
     """
     Optimize representative points using LBFGS with strong Wolfe line search.
     """
@@ -27,7 +28,9 @@ def optimize_lbfgs(S, X_hat, P_hat, bandwidth_varifold, lr, max_iter, history_si
         return loss
 
     loss_history = []
+    no_improve_count = 0
     print("Starting LBFGS optimization loop...")
+    start_time = time.time()
     for epoch in range(epochs):
         loss = optimiser.step(closure)
         with torch.no_grad():
@@ -36,5 +39,21 @@ def optimize_lbfgs(S, X_hat, P_hat, bandwidth_varifold, lr, max_iter, history_si
             X_hat.clamp_(min=0.0, max=1.0)
         loss_history.append(loss.item())
         print(f"[LBFGS] Epoch {epoch+1:3d}/{epochs} | Loss: {loss.item():.6f}")
+
+        # Early stopping check
+        if len(loss_history) > 1:
+            delta = abs(loss_history[-2] - loss_history[-1])
+            if delta < tol:
+                no_improve_count += 1
+            else:
+                no_improve_count = 0
+
+            if no_improve_count >= patience:
+                print(f"Early stopping at epoch {epoch+1:3d} | Loss: {loss_history[-1]:.6f} < tol {tol:.2e}")
+                break
+
+    elapsed_time = time.time() - start_time
+    print(f"Optimization finished in {elapsed_time:.2f} seconds.")
+
 
     return X_hat, P_hat, loss_history

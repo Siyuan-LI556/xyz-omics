@@ -9,3 +9,5 @@ LR           = 0.1
 MAX_ITER     = 20
 HISTORY_SIZE = 10
 EPOCHS       = 50
+TOL = 1e-6
+PATIENCE = 5

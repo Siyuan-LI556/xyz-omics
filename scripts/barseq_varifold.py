@@ -1,7 +1,7 @@
 # scripts/barseq_varifold.py
 import os
 import torch
-from src.config import M, BASE_SIGMA, LR, MAX_ITER, HISTORY_SIZE, EPOCHS
+from src.config import M, BASE_SIGMA, LR, MAX_ITER, HISTORY_SIZE, EPOCHS, TOL, PATIENCE
 from src.io.loader import load_barseq
 from src.subsampling.kmeans import kmeans_subsample
 from src.losses.varifold import varifold_sp
@@ -32,7 +32,8 @@ X_hat, P_hat = kmeans_subsample(X_orig, P_orig, M, device)
 # ── Optimize ───────────────────────────────────────────
 X_hat, P_hat, loss_history = optimize_lbfgs(
     S, X_hat, P_hat, bandwidth_varifold,
-    lr=LR, max_iter=MAX_ITER, history_size=HISTORY_SIZE, epochs=EPOCHS
+    lr=LR, max_iter=MAX_ITER, history_size=HISTORY_SIZE, epochs=EPOCHS,
+    tol=TOL, patience=PATIENCE
 )
 
 # ── Export ─────────────────────────────────────────────
