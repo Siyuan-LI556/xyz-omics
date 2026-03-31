@@ -1,0 +1,40 @@
+# src/io/plot.py
+import matplotlib.pyplot as plt
+import numpy as np
+
+def plot_gene_distributions(P_orig, P_hat, gene_names=None, output_dir=None):
+    """
+    Compare gene expression distributions before and after compression.
+    """
+    n_genes = P_orig.shape[1]
+    cols = 6
+    rows = (n_genes + cols - 1) // cols
+
+    fig, axes = plt.subplots(rows, cols, figsize=(18, rows * 3))
+    axes = axes.flatten()
+
+    P_orig_np = P_orig.detach().cpu().numpy()
+    P_hat_np  = P_hat.detach().cpu().numpy()
+
+    for i in range(n_genes):
+        ax = axes[i]
+        x_max = np.percentile(P_orig_np[:, i], 95)
+        data_orig = P_orig_np[:, i][P_orig_np[:, i] <= x_max]
+        data_hat = P_hat_np[:, i][P_hat_np[:, i] <= x_max]
+
+        ax.hist(data_orig, bins=50, alpha=0.5, label="Original", density=False)
+        ax.hist(data_hat, bins=50, alpha=0.5, label="Compressed", density=False)
+        ax.set_xlim(0, x_max)
+
+        title = gene_names[i] if gene_names else f"Gene {i}"
+        ax.set_title(title)
+        ax.legend(fontsize=6)
+
+    for j in range(n_genes, len(axes)):
+        axes[j].set_visible(False)
+
+    plt.suptitle("Gene Expression Distribution: Original vs Compressed")
+    plt.tight_layout()
+    if output_dir:
+        plt.savefig(f"{output_dir}/gene_distributions_random.png", dpi=150)
+    plt.show()

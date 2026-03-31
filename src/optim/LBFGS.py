@@ -49,7 +49,7 @@ def optimize_lbfgs(S, X_hat, P_hat, bandwidth_varifold, lr, max_iter, history_si
                 no_improve_count = 0
 
             if no_improve_count >= patience:
-                print(f"Early stopping at epoch {epoch+1:3d} | Loss: {loss_history[-1]:.6f} < tol {tol:.2e}")
+                print(f"Early stopping at epoch {epoch-2:3d} | Loss: {loss_history[-1]:.6f} < tol {tol:.2e}")
                 break
 
     elapsed_time = time.time() - start_time
