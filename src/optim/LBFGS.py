@@ -28,6 +28,7 @@ def optimize_lbfgs(S, X_hat, P_hat, bandwidth_varifold, lr, max_iter, history_si
         return loss
 
     loss_history = []
+    time_history = []
     no_improve_count = 0
     print("Starting LBFGS optimization loop...")
     start_time = time.time()
@@ -38,6 +39,7 @@ def optimize_lbfgs(S, X_hat, P_hat, bandwidth_varifold, lr, max_iter, history_si
             P_hat.clamp_(min=0)
             X_hat.clamp_(min=0.0, max=1.0)
         loss_history.append(loss.item())
+        time_history.append(time.time() - start_time)
         print(f"[LBFGS] Epoch {epoch+1:3d}/{epochs} | Loss: {loss.item():.6f}")
 
         # Early stopping check
@@ -56,4 +58,4 @@ def optimize_lbfgs(S, X_hat, P_hat, bandwidth_varifold, lr, max_iter, history_si
     print(f"Optimization finished in {elapsed_time:.2f} seconds.")
 
 
-    return X_hat, P_hat, loss_history
+    return X_hat, P_hat, loss_history, time_history

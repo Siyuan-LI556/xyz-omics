@@ -8,6 +8,7 @@ from src.subsampling.random import random_subsample
 from src.optim.LBFGS import optimize_lbfgs
 from src.io.vtk_export import export_vtp
 from src.io.plot import plot_gene_distributions
+from src.io.plot import plot_loss_curve
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -31,7 +32,7 @@ print(f"Preparing to compress {X_orig.shape[0]} brain cell points into {M} repre
 X_hat, P_hat = kmeans_subsample(X_orig, P_orig, M, device)
 #X_hat, P_hat = random_subsample(X_orig, P_orig, M)
 # ── Optimize ───────────────────────────────────────────
-X_hat, P_hat, loss_history = optimize_lbfgs(
+X_hat, P_hat, loss_history,time_history = optimize_lbfgs(
     S, X_hat, P_hat, bandwidth_varifold,
     lr=LR, max_iter=MAX_ITER, history_size=HISTORY_SIZE, epochs=EPOCHS,
     tol=TOL, patience=PATIENCE
@@ -39,4 +40,5 @@ X_hat, P_hat, loss_history = optimize_lbfgs(
 # ── Export ─────────────────────────────────────────────
 export_vtp(X_orig, P_orig, X_hat, P_hat, X_min, X_max, OUTPUT_DIR)
 torch.save((X_hat,P_hat,P_orig, loss_history), os.path.join(OUTPUT_DIR, "results.pt",))
-plot_gene_distributions(P_orig, P_hat, output_dir=OUTPUT_DIR)
+#plot_gene_distributions(P_orig, P_hat, output_dir=OUTPUT_DIR)
+plot_loss_curve(loss_history, time_history, output_dir=OUTPUT_DIR, suffix="kmeans")

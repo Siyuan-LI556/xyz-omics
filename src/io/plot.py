@@ -38,3 +38,19 @@ def plot_gene_distributions(P_orig, P_hat, gene_names=None, output_dir=None):
     if output_dir:
         plt.savefig(f"{output_dir}/gene_distributions_random.png", dpi=150)
     plt.show()
+
+def plot_loss_curve(loss_history, time_history, output_dir=None, suffix=""):
+    """
+    Plot the loss curve of the optimizer.
+    x-axis: time, y-axis: varifold loss value
+    """
+    plt.figure(figsize=(8, 5))
+    plt.plot(time_history, loss_history)
+    plt.xscale("log")
+    plt.xlabel("time(seconds)")
+    plt.ylabel("varifold loss")
+    plt.title("optimization loss curve")
+    plt.tight_layout()
+    if output_dir:
+        plt.savefig(f"{output_dir}/loss_curve_{suffix}.png", dpi=150)
+    plt.show()
