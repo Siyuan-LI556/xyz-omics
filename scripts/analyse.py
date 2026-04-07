@@ -7,8 +7,11 @@ DATA_FILE  = os.path.join(BASE_DIR, "data", "BARSeq", "D076_1L_approx200um.npz")
 OUTPUT_DIR = os.path.join(BASE_DIR, "data", "BARSeq", "output")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-X_hat,P_hat,P_orig, loss_history=torch.load(os.path.join(OUTPUT_DIR, "results.pt",))
+X_orig,X_hat,P_hat,P_orig, loss_history=torch.load(os.path.join(OUTPUT_DIR, "results.pt",))
 print(P_hat.shape)
+
+X_orig_np = X_orig.cpu().numpy()
+X_hat_np  = X_hat.detach().cpu().numpy()
 
 # plot p-hat sum(0）
 plt.figure()

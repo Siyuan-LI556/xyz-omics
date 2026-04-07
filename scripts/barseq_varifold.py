@@ -1,12 +1,12 @@
 # scripts/barseq_varifold.py
 import os
 import torch
-from src.config import M, BASE_SIGMA, LR, MAX_ITER, HISTORY_SIZE, EPOCHS, TOL, PATIENCE
+from src.config import M, BASE_SIGMA, LR, MAX_ITER, HISTORY_SIZE, EPOCHS, TOL, PATIENCE, SIGMA_Z, SIGMA_XY
 from src.io.loader import load_barseq
 from src.subsampling.kmeans import kmeans_subsample
 from src.subsampling.random import random_subsample
 from src.optim.LBFGS import optimize_lbfgs
-from src.io.vtk_export import export_vtp
+from src.io.vtk_export import export_orig_vtp, export_hat_vtp
 from src.io.plot import plot_gene_distributions
 from src.io.plot import plot_loss_curve
 
@@ -38,7 +38,8 @@ X_hat, P_hat, loss_history,time_history = optimize_lbfgs(
     tol=TOL, patience=PATIENCE
 )
 # ── Export ─────────────────────────────────────────────
-export_vtp(X_orig, P_orig, X_hat, P_hat, X_min, X_max, OUTPUT_DIR)
-torch.save((X_hat,P_hat,P_orig, loss_history), os.path.join(OUTPUT_DIR, "results.pt",))
+export_orig_vtp(X_orig, P_orig, X_min, X_max, OUTPUT_DIR)
+export_hat_vtp(X_hat, P_hat, X_min, X_max, OUTPUT_DIR, suffix="kmeans")
+torch.save((X_orig,X_hat,P_hat,P_orig, loss_history), os.path.join(OUTPUT_DIR, "results.pt",))
 #plot_gene_distributions(P_orig, P_hat, output_dir=OUTPUT_DIR)
 plot_loss_curve(loss_history, time_history, output_dir=OUTPUT_DIR, suffix="kmeans")
