@@ -34,3 +34,24 @@ def export_hat_vtp(X_hat, P_hat, X_min, X_max, output_dir, suffix="kmeans"):
     file_hat = os.path.join(output_dir, f"hat_{suffix}.vtp")
     cloud_hat.save(file_hat)
     print(f"Saved representative point cloud to {file_hat}")
+
+
+def export_middle_slices_vtp(X_mid, P_mid, selected_z, slice_id, output_dir):
+    """
+    Export the merged middle slices and each individual slice as .vtp for ParaView.
+    """
+    X_np = X_mid.astype(np.float32).copy()
+    P_np = P_mid.astype(np.float32)
+
+    # Flatten all points onto z=0 so the 3 merged slices appear as one plane.
+    X_np[:, 2] = 0.0
+
+    # Merged file
+    cloud = pv.PolyData(X_np)
+    cloud.point_data["Gene_weight"]      = P_np
+    cloud.point_data["Total_expression"] = P_np.sum(axis=1)
+    cloud.point_data["Slice_id"]         = slice_id
+
+    merged_file = os.path.join(output_dir, "middle_slices_merged.vtp")
+    cloud.save(merged_file)
+    print(f"Saved merged middle slices to {merged_file}")

@@ -28,3 +28,36 @@ def load_barseq(filepath: str, device: torch.device):
     X = (X - X_min) / (X_max - X_min)
 
     return X, P, X_min, X_max
+
+
+def load_middle_slices(filepath: str, n: int = 3):
+    """
+    Load BARSeq data and return the middle n slices along the z-axis (original coordinates).
+    """
+    print("Loading .npz file for slice extraction...")
+    data = np.load(filepath)
+    X = data['X']
+    P = data['nu_X']
+    z_vals = X[:, 2]
+    # Round z to the nearest integer to handle floating-point noise across
+    # points that nominally belong to the same physical slice.
+    z_rounded = np.round(z_vals).astype(np.int64)
+    unique_z = np.unique(z_rounded)
+    n_slices = len(unique_z)
+
+    if n_slices < n:
+        raise ValueError(f"Data has only {n_slices} slices, cannot select {n}.")
+
+    mid = n_slices // 2
+    half = n // 2
+    selected_z = unique_z[mid - half : mid - half + n]
+    print(f"Selected middle {n} z-slices: {selected_z}")
+
+    mask = np.isin(z_rounded, selected_z)
+    X_mid = X[mask]
+    P_mid = P[mask]
+    slice_id = np.searchsorted(selected_z, z_rounded[mask]).astype(np.int32)
+
+    print(f"Points in middle {n} slices: {X_mid.shape[0]}")
+    print(f"Unique z in X_mid (verification): {np.unique(X_mid[:, 2])}")
+    return X_mid, P_mid, selected_z, slice_id
