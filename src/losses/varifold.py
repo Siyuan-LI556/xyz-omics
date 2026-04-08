@@ -11,7 +11,7 @@ def gaussian_kernel_anisotropic(x_i, x_j, sigma_xy, sigma_z):
     Anisotropic Gaussian kernel with different bandwidths for xy-plane and z-axis.
     Diagonal covariance: diag(sigma_xy^2, sigma_xy^2, sigma_z^2)
     """
-    diff   = x_i - x_j                                      # (..., 3)
+    diff   = x_i - x_j
     diff_x = diff[..., 0:1]                                  # x component
     diff_y = diff[..., 1:2]                                  # y component
     diff_z = diff[..., 2:3]                                  # z component

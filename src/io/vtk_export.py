@@ -40,8 +40,8 @@ def export_middle_slices_vtp(X_mid, P_mid, selected_z, slice_id, output_dir):
     """
     Export the merged middle slices and each individual slice as .vtp for ParaView.
     """
-    X_np = X_mid.astype(np.float32).copy()
-    P_np = P_mid.astype(np.float32)
+    X_np = X_mid.copy()
+    P_np = P_mid
 
     # Flatten all points onto z=0 so the 3 merged slices appear as one plane.
     X_np[:, 2] = 0.0
@@ -50,7 +50,6 @@ def export_middle_slices_vtp(X_mid, P_mid, selected_z, slice_id, output_dir):
     cloud = pv.PolyData(X_np)
     cloud.point_data["Gene_weight"]      = P_np
     cloud.point_data["Total_expression"] = P_np.sum(axis=1)
-    cloud.point_data["Slice_id"]         = slice_id
 
     merged_file = os.path.join(output_dir, "middle_slices_merged.vtp")
     cloud.save(merged_file)

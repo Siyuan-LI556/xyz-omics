@@ -41,12 +41,11 @@ def load_middle_slices(filepath: str, n: int = 3):
     z_vals = X[:, 2]
     # Round z to the nearest integer to handle floating-point noise across
     # points that nominally belong to the same physical slice.
-    z_rounded = np.round(z_vals).astype(np.int64)
+    #print(f"Raw z unique values: {np.unique(X[:, 2])}")
+    z_rounded = np.round(z_vals, decimals=1)
     unique_z = np.unique(z_rounded)
     n_slices = len(unique_z)
-
-    if n_slices < n:
-        raise ValueError(f"Data has only {n_slices} slices, cannot select {n}.")
+    print(f"Number of slices {n_slices}")
 
     mid = n_slices // 2
     half = n // 2
@@ -58,6 +57,4 @@ def load_middle_slices(filepath: str, n: int = 3):
     P_mid = P[mask]
     slice_id = np.searchsorted(selected_z, z_rounded[mask]).astype(np.int32)
 
-    print(f"Points in middle {n} slices: {X_mid.shape[0]}")
-    print(f"Unique z in X_mid (verification): {np.unique(X_mid[:, 2])}")
     return X_mid, P_mid, selected_z, slice_id
