@@ -1,17 +1,23 @@
-# Subsampling parameters
-M = 1000            # Number of representative points
+# ── Experiment identity ────────────────────────────────
+RUN_ID           = 1             # increment for each experiment
+SUBSAMPLE_METHOD = "kmeans"      # "kmeans" | "random"
+KERNEL_TYPE      = "anisotropic" # "isotropic" | "anisotropic"
 
-# Varifold kernel parameters
-BASE_SIGMA = 1.0    # Base bandwidth for varifold kernel, can be tuned based on data scale and desired smoothness
+# Derived output suffix — used for all file names, do not edit manually
+SUFFIX = f"run{RUN_ID:02d}_{SUBSAMPLE_METHOD}_{KERNEL_TYPE}"
 
-# LBFGS optimizer parameters
+# ── Subsampling ────────────────────────────────────────
+M = 1000            # number of representative points
+
+# ── Varifold kernel parameters ─────────────────────────
+BASE_SIGMA = 1.0    # isotropic bandwidth (scaled by M at runtime)
+SIGMA_XY   = 0.02   # anisotropic: bandwidth for x/y directions
+SIGMA_Z    = 0.1    # anisotropic: bandwidth for z direction
+
+# ── LBFGS optimizer ────────────────────────────────────
 LR           = 0.1
 MAX_ITER     = 20
 HISTORY_SIZE = 10
 EPOCHS       = 500
-TOL = 1e-6
-PATIENCE = 3
-
-# Anisotropic varifold kernel parameters
-SIGMA_XY = 0.02   # bandwidth for x and y directions
-SIGMA_Z  = 0.1   # bandwidth for z direction (slice thickness)
+TOL          = 1e-6
+PATIENCE     = 3

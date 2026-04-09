@@ -5,16 +5,16 @@ def gaussian_kernel(x_i, x_j, sigma):
     dist_sq = ((x_i - x_j) ** 2).sum(-1)
     return (-dist_sq / (2 * sigma ** 2)).exp()
 
-# fonction de gaussian anisotropic
+# function of gaussian anisotropic
 def gaussian_kernel_anisotropic(x_i, x_j, sigma_xy, sigma_z):
     """
     Anisotropic Gaussian kernel with different bandwidths for xy-plane and z-axis.
     Diagonal covariance: diag(sigma_xy^2, sigma_xy^2, sigma_z^2)
     """
     diff   = x_i - x_j
-    diff_x = diff[..., 0:1]                                  # x component
-    diff_y = diff[..., 1:2]                                  # y component
-    diff_z = diff[..., 2:3]                                  # z component
+    diff_x = diff[0:1]   # x component (LazyTensor slices last dim only, no ellipsis)
+    diff_y = diff[1:2]   # y component
+    diff_z = diff[2:3]   # z component
 
     dist_sq = (diff_x ** 2 + diff_y ** 2) / (2 * sigma_xy ** 2) + \
               (diff_z ** 2)               / (2 * sigma_z  ** 2)

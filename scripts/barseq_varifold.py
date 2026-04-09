@@ -1,17 +1,22 @@
 # scripts/barseq_varifold.py
 import os
 import torch
-from src.config import M, BASE_SIGMA, LR, MAX_ITER, HISTORY_SIZE, EPOCHS, TOL, PATIENCE, SIGMA_Z, SIGMA_XY
+from src.config import (
+    RUN_ID, SUBSAMPLE_METHOD, KERNEL_TYPE, SUFFIX,
+    M, BASE_SIGMA, SIGMA_XY, SIGMA_Z,
+    LR, MAX_ITER, HISTORY_SIZE, EPOCHS, TOL, PATIENCE,
+)
 from src.io.loader import load_barseq, load_middle_slices
 from src.subsampling.kmeans import kmeans_subsample
 from src.subsampling.random import random_subsample
 from src.optim.LBFGS import optimize_lbfgs
-from src.io.vtk_export import export_orig_vtp, export_hat_vtp, export_middle_slices_vtp
-from src.io.plot import plot_gene_distributions
+from src.losses.varifold import varifold_sp, varifold_sp_anisotropic
+from src.io.vtk_export import export_orig_vtp, export_hat_vtp, export_middle_slices_vtp, export_hat_middle_slices_vtp
 from src.io.plot import plot_loss_curve
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
+print(f"Run config  : {SUFFIX}")
 
 # ── Paths ──────────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,31 +24,48 @@ DATA_FILE  = os.path.join(BASE_DIR, "data", "BARSeq", "D076_1L_approx200um.npz")
 OUTPUT_DIR = os.path.join(BASE_DIR, "data", "BARSeq", "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# ── Derived parameters ─────────────────────────────────
-bandwidth_varifold = BASE_SIGMA * (1 / M) ** (1 / 3)
-print(f"bandwidth_varifold set to {bandwidth_varifold:.4f} based on M={M} representative points.")
-
-# ── Load data ──────────────────────────────────────────
+# ── Load ───────────────────────────────────────────────
 X_orig, P_orig, X_min, X_max = load_barseq(DATA_FILE, device)
 S = (X_orig, P_orig)
 
 # ── Subsample ──────────────────────────────────────────
-print(f"Preparing to compress {X_orig.shape[0]} brain cell points into {M} representative points...")
-X_hat, P_hat = kmeans_subsample(X_orig, P_orig, M, device)
-#X_hat, P_hat = random_subsample(X_orig, P_orig, M)
+print(f"Subsampling method: {SUBSAMPLE_METHOD}  →  {M} representative points")
+if SUBSAMPLE_METHOD == "kmeans":
+    X_hat, P_hat = kmeans_subsample(X_orig, P_orig, M, device)
+elif SUBSAMPLE_METHOD == "random":
+    X_hat, P_hat = random_subsample(X_orig, P_orig, M)
+else:
+    raise ValueError(f"Unknown SUBSAMPLE_METHOD: '{SUBSAMPLE_METHOD}'. Use 'kmeans' or 'random'.")
+
+# ── Build varifold function ────────────────────────────
+print(f"Kernel type: {KERNEL_TYPE}")
+if KERNEL_TYPE == "isotropic":
+    bandwidth = BASE_SIGMA * (1 / M) ** (1 / 3)
+    print(f"Isotropic bandwidth: {bandwidth:.4f}")
+    varifold_fn = lambda S1, S2: varifold_sp(S1, S2, bandwidth)
+elif KERNEL_TYPE == "anisotropic":
+    print(f"Anisotropic bandwidth: sigma_xy={SIGMA_XY}, sigma_z={SIGMA_Z}")
+    varifold_fn = lambda S1, S2: varifold_sp_anisotropic(S1, S2, SIGMA_XY, SIGMA_Z)
+else:
+    raise ValueError(f"Unknown KERNEL_TYPE: '{KERNEL_TYPE}'. Use 'isotropic' or 'anisotropic'.")
+
 # ── Optimize ───────────────────────────────────────────
-X_hat, P_hat, loss_history,time_history = optimize_lbfgs(
-    S, X_hat, P_hat, bandwidth_varifold,
-    lr=LR, max_iter=MAX_ITER, history_size=HISTORY_SIZE, epochs=EPOCHS,
-    tol=TOL, patience=PATIENCE
+X_hat, P_hat, loss_history, time_history = optimize_lbfgs(
+    S, X_hat, P_hat, varifold_fn,
+    lr=LR, max_iter=MAX_ITER, history_size=HISTORY_SIZE,
+    epochs=EPOCHS, tol=TOL, patience=PATIENCE,
 )
+
 # ── Export ─────────────────────────────────────────────
 export_orig_vtp(X_orig, P_orig, X_min, X_max, OUTPUT_DIR)
-export_hat_vtp(X_hat, P_hat, X_min, X_max, OUTPUT_DIR, suffix="kmeans")
-torch.save((X_orig,X_hat,P_hat,P_orig, loss_history), os.path.join(OUTPUT_DIR, "results.pt",))
-#plot_gene_distributions(P_orig, P_hat, output_dir=OUTPUT_DIR)
-#plot_loss_curve(loss_history, time_history, output_dir=OUTPUT_DIR, suffix="kmeans")
+export_hat_vtp(X_hat, P_hat, X_min, X_max, OUTPUT_DIR, suffix=SUFFIX)
+torch.save(
+    (X_orig, X_hat, P_hat, P_orig, loss_history),
+    os.path.join(OUTPUT_DIR, f"results_{SUFFIX}.pt"),
+)
+plot_loss_curve(loss_history, time_history, output_dir=OUTPUT_DIR, suffix=SUFFIX)
 
-# ── Middle 3 slices export ─────────────────────────────────────────────────
+# ── Middle 3 slices comparison ─────────────────────────
 X_mid, P_mid, selected_z, slice_id = load_middle_slices(DATA_FILE, n=3)
 export_middle_slices_vtp(X_mid, P_mid, selected_z, slice_id, OUTPUT_DIR)
+export_hat_middle_slices_vtp(X_hat, P_hat, X_min, X_max, selected_z, OUTPUT_DIR, suffix=SUFFIX)
