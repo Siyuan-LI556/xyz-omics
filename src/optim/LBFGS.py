@@ -22,7 +22,7 @@ def optimize_lbfgs(S, X_hat, P_hat, varifold_fn, lr, max_iter, history_size, epo
     )
 
     term0 = varifold_fn(S, S)
-
+    #print(f"term0 is {term0}")
     def closure():
         optimiser.zero_grad()
         S_hat = (X_hat, P_hat)
@@ -31,7 +31,19 @@ def optimize_lbfgs(S, X_hat, P_hat, varifold_fn, lr, max_iter, history_size, epo
         loss  = term0 + term1 - 2 * term2
         loss.backward()
         return loss
-
+    '''
+    # Compute gradient at the initial point before any optimizer step.
+    # Both kernels are evaluated at the same X_hat, so this is a fair comparison.
+    optimiser.zero_grad()
+    with torch.enable_grad():
+        S_hat0 = (X_hat, P_hat)
+        t1 = varifold_fn(S_hat0, S_hat0)
+        t2 = varifold_fn(S, S_hat0)
+        (term0 + t1 - 2 * t2).backward()
+    print(f"[Grad init] X_hat.grad norm: {X_hat.grad.norm().item():.6e}")
+    print(f"[Grad init] X_hat.grad[:3]:\n{X_hat.grad[:3]}")
+    optimiser.zero_grad()
+    '''
     loss_history = []
     time_history = []
     no_improve_count = 0
