@@ -25,7 +25,7 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "data", "BARSeq", "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ── Load ───────────────────────────────────────────────
-X_orig, P_orig, X_min, X_max = load_barseq(DATA_FILE, device)
+X_orig, P_orig, W_orig, P_norm_orig, X_min, X_max = load_barseq(DATA_FILE, device)
 S = (X_orig, P_orig)
 
 # ── Subsample ──────────────────────────────────────────

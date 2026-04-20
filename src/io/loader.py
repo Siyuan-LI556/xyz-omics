@@ -22,12 +22,20 @@ def load_barseq(filepath: str, device: torch.device):
     X = torch.tensor(Position_BarSeq, dtype=torch.float32, device=device)
     P = torch.tensor(Feature_BarSeq,  dtype=torch.float32, device=device)
 
+    # Decompose nu_X = w_i * p_i
+    # w_i : scalar total gene expression per cell (L1, sum over all genes)
+    # p_i : normalized gene profile              (probability vector, sums to 1)
+    W = P.sum(dim=1)                        # shape (N,)
+    P_norm = P / (W.unsqueeze(1) + 1e-12)  # shape (N, 39)
+
+    print(f"w_i  — min={W.min().item():.4f}, max={W.max().item():.4f}, mean={W.mean().item():.4f}")
+
     # Normalize spatial coordinates to [0, 1] range
     X_min, _ = torch.min(X, dim=0)
     X_max, _ = torch.max(X, dim=0)
     X = (X - X_min) / (X_max - X_min)
 
-    return X, P, X_min, X_max
+    return X, P, W, P_norm, X_min, X_max
 
 
 def load_middle_slices(filepath: str, n: int = 3):
