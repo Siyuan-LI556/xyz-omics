@@ -47,9 +47,12 @@ def plot_loss_curve(loss_history, time_history, output_dir=None, suffix=""):
     plt.figure(figsize=(8, 5))
     plt.plot(time_history, loss_history)
     plt.xscale("log")
+    plt.yscale("log")
+    plt.xlim(1, 80)
+    plt.ylim(1e-4, 6e-2)
     plt.xlabel("time(seconds)")
     plt.ylabel("varifold loss")
-    plt.title("optimization loss curve")
+    plt.title("loss curve adam")
     plt.tight_layout()
     if output_dir:
         plt.savefig(f"{output_dir}/loss_curve_{suffix}.png", dpi=150)

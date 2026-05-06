@@ -2,14 +2,16 @@
 import os
 import torch
 from src.config import (
-    RUN_ID, SUBSAMPLE_METHOD, KERNEL_TYPE, SUFFIX,
+    RUN_ID, SUBSAMPLE_METHOD, KERNEL_TYPE, OPTIMIZER, SUFFIX,
     M, BASE_SIGMA, SIGMA_XY, SIGMA_Z,
     LR, MAX_ITER, HISTORY_SIZE, EPOCHS, TOL, PATIENCE,
+    ADAM_LR_X, ADAM_LR_P, ADAM_EPOCHS, ADAM_TOL, ADAM_PATIENCE,
 )
 from src.io.loader import load_barseq, load_middle_slices
 from src.subsampling.kmeans import kmeans_subsample
 from src.subsampling.random import random_subsample
 from src.optim.LBFGS import optimize_lbfgs
+from src.optim.Adam import optimize_adam
 from src.losses.varifold import varifold_sp, varifold_sp_anisotropic
 from src.io.vtk_export import export_orig_vtp, export_hat_vtp, export_middle_slices_vtp, export_hat_middle_slices_vtp
 from src.io.plot import plot_loss_curve
@@ -50,11 +52,21 @@ else:
     raise ValueError(f"Unknown KERNEL_TYPE: '{KERNEL_TYPE}'. Use 'isotropic' or 'anisotropic'.")
 
 # ── Optimize ───────────────────────────────────────────
-X_hat, P_hat, loss_history, time_history = optimize_lbfgs(
-    S, X_hat, P_hat, varifold_fn,
-    lr=LR, max_iter=MAX_ITER, history_size=HISTORY_SIZE,
-    epochs=EPOCHS, tol=TOL, patience=PATIENCE,
-)
+print(f"Optimizer: {OPTIMIZER}")
+if OPTIMIZER == "lbfgs":
+    X_hat, P_hat, loss_history, time_history = optimize_lbfgs(
+        S, X_hat, P_hat, varifold_fn,
+        lr=LR, max_iter=MAX_ITER, history_size=HISTORY_SIZE,
+        epochs=EPOCHS, tol=TOL, patience=PATIENCE,
+    )
+elif OPTIMIZER == "adam":
+    X_hat, P_hat, loss_history, time_history = optimize_adam(
+        S, X_hat, P_hat, varifold_fn,
+        lr_X=ADAM_LR_X, lr_P=ADAM_LR_P,
+        epochs=ADAM_EPOCHS, tol=ADAM_TOL, patience=ADAM_PATIENCE,
+    )
+else:
+    raise ValueError(f"Unknown OPTIMIZER: '{OPTIMIZER}'. Use 'lbfgs' or 'adam'.")
 
 # ── Export ─────────────────────────────────────────────
 export_orig_vtp(X_orig, P_orig, X_min, X_max, OUTPUT_DIR)
