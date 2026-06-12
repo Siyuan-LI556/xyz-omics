@@ -220,3 +220,19 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Data folders
+BARSEQ - C57BL6J/
+Spark/
+SPARK-X/
+
+# Run outputs
+run04_kmeans_anisotropic/
+run04_kmeans_isotropic/
+2026-05-18-115702-kmeansvarifoldlgfbs.txt
+
+# Papers / PDFs
+*.pdf
+*.txt
+
+# Optional: local experiment scripts
+scripts/sparkx_barseq/

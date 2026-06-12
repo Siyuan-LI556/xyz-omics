@@ -1,14 +1,14 @@
 # ── Experiment identity ────────────────────────────────
 RUN_ID           = 1             # increment for each experiment
-SUBSAMPLE_METHOD = "random"      # "kmeans" | "random"
+SUBSAMPLE_METHOD = "kmeans"      # "kmeans" | "random"
 KERNEL_TYPE      = "isotropic"   # "isotropic" | "anisotropic"
-OPTIMIZER        = "adam"       # "lbfgs" | "adam"
+OPTIMIZER        = "lbfgs"       # "lbfgs" | "adam"
 
 # Derived output suffix — used for all file names, do not edit manually
 SUFFIX = f"run{RUN_ID:02d}_{SUBSAMPLE_METHOD}_{KERNEL_TYPE}_{OPTIMIZER}"
 
 # ── Subsampling ────────────────────────────────────────
-M = 1000            # number of representative points
+M = 5000            # number of representative points
 
 # ── Varifold kernel parameters ─────────────────────────
 BASE_SIGMA = 1.0    # isotropic bandwidth (scaled by M at runtime)

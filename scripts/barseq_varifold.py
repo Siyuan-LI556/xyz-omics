@@ -22,6 +22,7 @@ print(f"Run config  : {SUFFIX}")
 
 # ── Paths ──────────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+#DATA_FILE  = os.path.join(BASE_DIR, "data", "BARSeq", "all_slices_C57BL6J.npz")
 DATA_FILE  = os.path.join(BASE_DIR, "data", "BARSeq", "D076_1L_approx200um.npz")
 OUTPUT_DIR = os.path.join(BASE_DIR, "data", "BARSeq", "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
