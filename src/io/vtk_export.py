@@ -3,6 +3,17 @@ import os
 import numpy as np
 import pyvista as pv
 
+def _to_3d(points):
+    if hasattr(points, "detach"):              # torch tensor -> numpy
+        points = points.detach().cpu().numpy()
+    points = np.asarray(points)
+    n, d = points.shape
+    if d == 3:
+        return np.ascontiguousarray(points, dtype=np.float32)
+    if d == 2:
+        z = np.zeros((n, 1), dtype=points.dtype)
+        return np.ascontiguousarray(np.hstack([points, z]), dtype=np.float32)
+    raise ValueError(f"points must have 2 or 3 columns, got {d}")
 
 def _decompose(P_np):
     """Split P = w_i * p_i into scalar weight w_i and normalized profile p_i."""
@@ -18,7 +29,7 @@ def export_orig_vtp(X_orig, P_orig, X_min, X_max, output_dir):
     P_np = P_orig.detach().cpu().numpy()
     w, p = _decompose(P_np)
 
-    cloud_orig = pv.PolyData(X_orig_restored)
+    cloud_orig = pv.PolyData(_to_3d(X_orig_restored))
     cloud_orig.point_data["nu_X"]          = P_np   # raw w_i * p_i  (39-dim vector)
     cloud_orig.point_data["wi"]            = w ** 1/3      # scalar total expression
     cloud_orig.point_data["pi"]            = p       # normalized gene profile (39-dim)
@@ -36,7 +47,7 @@ def export_hat_vtp(X_hat, P_hat, X_min, X_max, output_dir, suffix="kmeans"):
     P_np = P_hat.detach().cpu().numpy()
     w, p = _decompose(P_np)
 
-    cloud_hat = pv.PolyData(X_hat_restored)
+    cloud_hat = pv.PolyData(_to_3d(X_hat_restored))
     cloud_hat.point_data["nu_X"]          = P_np
     cloud_hat.point_data["wi"]            = w
     cloud_hat.point_data["pi"]            = p

@@ -33,7 +33,9 @@ def load_barseq(filepath: str, device: torch.device):
     # Normalize spatial coordinates to [0, 1] range
     X_min, _ = torch.min(X, dim=0)
     X_max, _ = torch.max(X, dim=0)
-    X = (X - X_min) / (X_max - X_min)
+    X_range = X_max - X_min
+    X_range[X_range == 0] = 1.0
+    X = (X - X_min) / X_range
 
     return X, P, W, P_norm, X_min, X_max
 

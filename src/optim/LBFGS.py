@@ -57,7 +57,7 @@ def optimize_lbfgs(S, X_hat, P_hat, varifold_fn, lr, max_iter, history_size, epo
             X_hat.clamp_(min=0.0, max=1.0)
         loss_history.append(loss.item())
         time_history.append(time.time() - start_time)
-        print(f"[LBFGS] Epoch {epoch+1:3d}/{epochs} | Loss: {loss.item():.6f}")
+        print(f"[LBFGS] Epoch {epoch+1:3d}/{epochs} | Loss: {loss.item():.8f}")
 
         if len(loss_history) > 1:
             delta = abs(loss_history[-2] - loss_history[-1])
@@ -66,7 +66,7 @@ def optimize_lbfgs(S, X_hat, P_hat, varifold_fn, lr, max_iter, history_size, epo
             else:
                 no_improve_count = 0
             if no_improve_count >= patience:
-                print(f"Early stopping at epoch {epoch+1:3d} | Loss: {loss_history[-1]:.6f} < tol {tol:.2e}")
+                print(f"Early stopping at epoch {epoch+1:3d} | Loss: {loss_history[-1]:.8f} < tol {tol:.2e}")
                 break
 
     print(f"Optimization finished in {time.time() - start_time:.2f} seconds.")

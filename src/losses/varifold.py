@@ -36,10 +36,10 @@ def varifold_sp(S1, S2, sigma=1.0):
     M, _ = x2.shape
     _, D_feat = p1.shape
 
-    x_i = LazyTensor(x1.view(N, 1, D_pos))
-    x_j = LazyTensor(x2.view(1, M, D_pos))
-    p_i = LazyTensor(p1.view(N, 1, D_feat))
-    p_j = LazyTensor(p2.view(1, M, D_feat))
+    x_i = LazyTensor(x1.contiguous().view(N, 1, D_pos))
+    x_j = LazyTensor(x2.contiguous().view(1, M, D_pos))
+    p_i = LazyTensor(p1.contiguous().view(N, 1, D_feat))
+    p_j = LazyTensor(p2.contiguous().view(1, M, D_feat))
 
     K_pos = gaussian_kernel(x_i, x_j, sigma)
     K_feat = linear_kernel(p_i, p_j)
@@ -54,10 +54,10 @@ def varifold_sp_anisotropic(S1, S2, sigma_xy=0.02, sigma_z=0.1):
     M, _      = x2.shape
     _, D_feat = p1.shape
 
-    x_i = LazyTensor(x1.view(N, 1, D_pos))
-    x_j = LazyTensor(x2.view(1, M, D_pos))
-    p_i = LazyTensor(p1.view(N, 1, D_feat))
-    p_j = LazyTensor(p2.view(1, M, D_feat))
+    x_i = LazyTensor(x1.contiguous().view(N, 1, D_pos))
+    x_j = LazyTensor(x2.contiguous().view(1, M, D_pos))
+    p_i = LazyTensor(p1.contiguous().view(N, 1, D_feat))
+    p_j = LazyTensor(p2.contiguous().view(1, M, D_feat))
 
     K_pos  = gaussian_kernel_anisotropic(x_i, x_j, sigma_xy, sigma_z)
     #K_pos_is = gaussian_kernel(x_i, x_j, sigma_xy)

@@ -1,5 +1,5 @@
 # ── Experiment identity ────────────────────────────────
-RUN_ID           = 1             # increment for each experiment
+RUN_ID           = 22             # increment for each experiment
 SUBSAMPLE_METHOD = "kmeans"      # "kmeans" | "random"
 KERNEL_TYPE      = "isotropic"   # "isotropic" | "anisotropic"
 OPTIMIZER        = "lbfgs"       # "lbfgs" | "adam"
@@ -8,7 +8,7 @@ OPTIMIZER        = "lbfgs"       # "lbfgs" | "adam"
 SUFFIX = f"run{RUN_ID:02d}_{SUBSAMPLE_METHOD}_{KERNEL_TYPE}_{OPTIMIZER}"
 
 # ── Subsampling ────────────────────────────────────────
-M = 5000            # number of representative points
+M = 500000            # number of representative points
 
 # ── Varifold kernel parameters ─────────────────────────
 BASE_SIGMA = 1.0    # isotropic bandwidth (scaled by M at runtime)
@@ -21,7 +21,7 @@ MAX_ITER     = 20
 HISTORY_SIZE = 10
 EPOCHS       = 500
 TOL          = 1e-6
-PATIENCE     = 3
+PATIENCE     = 5
 
 # ── Adam optimizer ─────────────────────────────────────
 ADAM_LR_X    = 0.01   # learning rate for X_hat
@@ -29,3 +29,10 @@ ADAM_LR_P    = 0.005  # learning rate for P_hat
 ADAM_EPOCHS  = 5000
 ADAM_TOL     = 2e-6
 ADAM_PATIENCE = 50
+
+# ── Tiling config ──────────────────────────────────────
+N_GRID      = 10            # n x n blocks
+
+TILE_MODE   = "blocks_and_strips"  # "blocks_only"  | "blocks_and_strips"
+M_TOTAL     = M            # global representative-point budget, split across regions
+strip_width = 0.002

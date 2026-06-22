@@ -51,7 +51,7 @@ def optimize_adam(S, X_hat, P_hat, varifold_fn, lr_X=0.01, lr_P=0.005, epochs=50
         time_history.append(time.time() - start_time)
 
         if (epoch + 1) % 10 == 0:
-            print(f"[Adam] Epoch {epoch+1:4d}/{epochs} | Loss: {loss_val:.6f}")
+            print(f"[Adam] Epoch {epoch+1:4d}/{epochs} | Loss: {loss_val:.8f}")
 
         if len(loss_history) > 1:
             delta = abs(loss_history[-2] - loss_history[-1])
@@ -60,7 +60,7 @@ def optimize_adam(S, X_hat, P_hat, varifold_fn, lr_X=0.01, lr_P=0.005, epochs=50
             else:
                 no_improve_count = 0
             if no_improve_count >= patience:
-                print(f"Early stopping at epoch {epoch+1:4d} | Loss: {loss_val:.6f} < tol {tol:.2e}")
+                print(f"Early stopping at epoch {epoch+1:4d} | Loss: {loss_val:.8f} < tol {tol:.2e}")
                 break
 
     print(f"Optimization finished in {time.time() - start_time:.2f} seconds.")
