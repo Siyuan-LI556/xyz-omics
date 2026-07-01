@@ -40,6 +40,7 @@ def split_slice_grid(X, P, n=4, strip_width=0.04, bounds=None, mode="blocks_only
                 add(f"block_r{r}_c{c}", "block", row_masks[r] & col_masks[c])
         return regions
 
+    # plan B, blocks and strips
     if mode == "blocks_and_strips":
         for r in range(n):
             for c in range(n):
@@ -49,4 +50,25 @@ def split_slice_grid(X, P, n=4, strip_width=0.04, bounds=None, mode="blocks_only
             add(f"vstrip_{i}", "vstrip", (x >= line - h) & (x <= line + h))
         for j, line in enumerate(gy):
             add(f"hstrip_{j}", "hstrip", (y >= line - h) & (y <= line + h))
+        return regions
+
+    # plan B', non-overlapping cores + shared overlaps on adjacent block pairs
+    if mode == "blocks_and_overlaps":
+        for r in range(n):
+            for c in range(n):
+                add(f"block_r{r}_c{c}", "block", row_masks[r] & col_masks[c])
+
+        rect = lambda x0, x1, y0, y1: (x >= x0) & (x <= x1) & (y >= y0) & (y <= y1)
+
+        # vertical seam ex[c]: overlap of horizontally-adjacent blocks (r,c-1)-(r,c)
+        for c in range(1, n):
+            for r in range(n):
+                add(f"voverlap_r{r}_c{c}", "overlap",
+                    rect(ex[c] - h, ex[c] + h, ey[r] - h, ey[r + 1] + h))
+
+        # horizontal seam ey[r]: overlap of vertically-adjacent blocks (r-1,c)-(r,c)
+        for r in range(1, n):
+            for c in range(n):
+                add(f"hoverlap_r{r}_c{c}", "overlap",
+                    rect(ex[c] - h, ex[c + 1] + h, ey[r] - h, ey[r] + h))
         return regions

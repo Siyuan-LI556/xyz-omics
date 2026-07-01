@@ -1,5 +1,5 @@
 # ── Experiment identity ────────────────────────────────
-RUN_ID           = 22             # increment for each experiment
+RUN_ID           = 26             # increment for each experiment
 SUBSAMPLE_METHOD = "kmeans"      # "kmeans" | "random"
 KERNEL_TYPE      = "isotropic"   # "isotropic" | "anisotropic"
 OPTIMIZER        = "lbfgs"       # "lbfgs" | "adam"
@@ -33,6 +33,6 @@ ADAM_PATIENCE = 50
 # ── Tiling config ──────────────────────────────────────
 N_GRID      = 10            # n x n blocks
 
-TILE_MODE   = "blocks_and_strips"  # "blocks_only"  | "blocks_and_strips"
+TILE_MODE   = "blocks_and_overlaps"  # "blocks_only"  | "blocks_and_strips" | "blocks_and_overlaps"
 M_TOTAL     = M            # global representative-point budget, split across regions
-strip_width = 0.002
+strip_width = 0.006
