@@ -4,20 +4,21 @@ import numpy as np
 import torch
 #import torch.optim as optim
 import pyvista as pv
-from pykeops.torch import LazyTensor
+from src.losses.varifold import varifold_sp
 from sklearn.cluster import KMeans
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # %% Set Paths
-data_dir = os.path.join("..", "data", "BARSeq")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+data_dir = os.path.join(BASE_DIR,"data", "BARSeq")
 output_dir = os.path.join(data_dir, "output")
 os.makedirs(output_dir, exist_ok=True)
 
 
 # %% Declare kernel functions and varifold loss
-
+'''
 def gaussian_kernel(x_i, x_j, sigma):
     dist_sq = ((x_i - x_j) ** 2).sum(-1)
     return (-dist_sq / (2 * sigma ** 2)).exp()
@@ -44,11 +45,12 @@ def varifold_sp(S1, S2, sigma=1.0):
     K_feat = linear_kernel(p_i, p_j)
     # Normalize by the product of the number of points to prevent extremely large Loss values
     return (K_pos * K_feat).sum(1).sum() / (N * M)
-
+'''
 
 # %% Load data
 print("Loading .npz file...")
-data_dir = os.path.join("..", "data", "BARSeq")
+
+data_dir = os.path.join(BASE_DIR, "data", "BARSeq")
 
 data = np.load(os.path.join(data_dir, "D076_1L_approx200um.npz"))
 
