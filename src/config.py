@@ -1,5 +1,5 @@
 # ── Experiment identity ────────────────────────────────
-RUN_ID           = 26             # increment for each experiment
+RUN_ID           = 31             # increment for each experiment
 SUBSAMPLE_METHOD = "kmeans"      # "kmeans" | "random"
 KERNEL_TYPE      = "isotropic"   # "isotropic" | "anisotropic"
 OPTIMIZER        = "lbfgs"       # "lbfgs" | "adam"
@@ -36,3 +36,7 @@ N_GRID      = 10            # n x n blocks
 TILE_MODE   = "blocks_and_overlaps"  # "blocks_only"  | "blocks_and_strips" | "blocks_and_overlaps"
 M_TOTAL     = M            # global representative-point budget, split across regions
 strip_width = 0.006
+BPRIME_OPTIMIZE_OVERLAP = True
+BPRIME_OVERLAP_KEEP_RATIO = 0.5  # e.g. 0.5 keeps half, 1/3 keeps one third
+BPRIME_CORE_OVERLAP = True  # True: cores span full block (overlap the seam band);
+                             # False: carve the seam band out so only overlaps cover it

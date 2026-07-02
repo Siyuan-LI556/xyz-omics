@@ -69,5 +69,57 @@ def optimize_lbfgs(S, X_hat, P_hat, varifold_fn, lr, max_iter, history_size, epo
                 print(f"Early stopping at epoch {epoch+1:3d} | Loss: {loss_history[-1]:.8f} < tol {tol:.2e}")
                 break
 
-    print(f"Optimization finished in {time.time() - start_time:.2f} seconds.")
+    return X_hat, P_hat, loss_history, time_history
+
+
+def optimize_lbfgs_joint(S_targets, X_hat, P_hat, varifold_fn, lr, max_iter, history_size, epochs, tol=1e-6, patience=5):
+    targets = [S for S in S_targets if S[0].shape[0] > 0]
+    if not targets:
+        return X_hat, P_hat, [], []
+
+    optimiser = torch.optim.LBFGS(
+        [X_hat, P_hat],
+        lr=lr,
+        max_iter=max_iter,
+        history_size=history_size,
+        line_search_fn="strong_wolfe"
+    )
+
+    target_self_terms = [varifold_fn(S, S) for S in targets]
+
+    def closure():
+        optimiser.zero_grad()
+        S_hat = (X_hat, P_hat)
+        term_hat = varifold_fn(S_hat, S_hat)
+        loss = target_self_terms[0] + term_hat - 2 * varifold_fn(targets[0], S_hat)
+        for term0, S in zip(target_self_terms[1:], targets[1:]):
+            loss = loss + term0 + term_hat - 2 * varifold_fn(S, S_hat)
+        loss.backward()
+        return loss
+
+    loss_history = []
+    time_history = []
+    no_improve_count = 0
+    print("Starting joint LBFGS optimization loop...")
+    start_time = time.time()
+
+    for epoch in range(epochs):
+        loss = optimiser.step(closure)
+        with torch.no_grad():
+            P_hat.clamp_(min=0)
+            X_hat.clamp_(min=0.0, max=1.0)
+        loss_history.append(loss.item())
+        time_history.append(time.time() - start_time)
+        print(f"[Joint LBFGS] Epoch {epoch+1:3d}/{epochs} | Loss: {loss.item():.8f}")
+
+        if len(loss_history) > 1:
+            delta = abs(loss_history[-2] - loss_history[-1])
+            if delta < tol:
+                no_improve_count += 1
+            else:
+                no_improve_count = 0
+            if no_improve_count >= patience:
+                print(f"Early stopping at epoch {epoch+1:3d} | Loss: {loss_history[-1]:.8f} < tol {tol:.2e}")
+                break
+
     return X_hat, P_hat, loss_history, time_history
