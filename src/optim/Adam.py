@@ -66,6 +66,64 @@ def optimize_adam(S, X_hat, P_hat, varifold_fn, lr_X=0.01, lr_P=0.005, epochs=50
     return X_hat, P_hat, loss_history, time_history
 
 
+def optimize_adam_masked(S, X_hat, P_hat, alpha, varifold_fn, lr_X=0.01, lr_P=0.005,
+                         epochs=5000, tol=1e-6, patience=50, move_P=False):
+    """
+    Masked (hat-weighted) Adam refinement. See optimize_lbfgs_masked for the meaning
+    of `alpha`: per-point movability, 0 at block/strip junctions (frozen), 1 at the
+    seam centre (free to fill the gap). Features frozen unless `move_P`.
+    """
+    param_groups = [{'params': [X_hat], 'lr': lr_X}]
+    if move_P:
+        param_groups.append({'params': [P_hat], 'lr': lr_P})
+    optimiser = torch.optim.Adam(param_groups)
+
+    term0 = varifold_fn(S, S)
+    a = alpha.detach().view(-1, 1)
+
+    loss_history = []
+    time_history = []
+    no_improve_count = 0
+    print("Starting masked Adam optimization loop...")
+    start_time = time.time()
+
+    for epoch in range(epochs):
+        optimiser.zero_grad()
+        S_hat = (X_hat, P_hat)
+        term1 = varifold_fn(S_hat, S_hat)
+        term2 = varifold_fn(S, S_hat)
+        loss = term0 + term1 - 2 * term2
+
+        loss.backward()
+        if X_hat.grad is not None:
+            X_hat.grad.mul_(a)
+        optimiser.step()
+
+        with torch.no_grad():
+            if move_P:
+                P_hat.clamp_(min=0)
+            X_hat.clamp_(min=0.0, max=1.0)
+
+        loss_val = loss.item()
+        loss_history.append(loss_val)
+        time_history.append(time.time() - start_time)
+
+        if (epoch + 1) % 10 == 0:
+            print(f"[Masked Adam] Epoch {epoch+1:4d}/{epochs} | Loss: {loss_val:.8f}")
+
+        if len(loss_history) > 1:
+            delta = abs(loss_history[-2] - loss_history[-1])
+            if delta < tol:
+                no_improve_count += 1
+            else:
+                no_improve_count = 0
+            if no_improve_count >= patience:
+                print(f"Early stopping at epoch {epoch+1:4d} | Loss: {loss_val:.8f} < tol {tol:.2e}")
+                break
+
+    return X_hat, P_hat, loss_history, time_history
+
+
 def optimize_adam_joint(S_targets, X_hat, P_hat, varifold_fn, lr_X=0.01, lr_P=0.005, epochs=5000, tol=1e-6, patience=50):
     targets = [S for S in S_targets if S[0].shape[0] > 0]
     if not targets:

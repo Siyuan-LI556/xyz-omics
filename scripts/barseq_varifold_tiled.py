@@ -8,7 +8,8 @@ from src.config import (
     LR, MAX_ITER, HISTORY_SIZE, EPOCHS, TOL, PATIENCE,
     ADAM_LR_X, ADAM_LR_P, ADAM_EPOCHS, ADAM_TOL, ADAM_PATIENCE,
     N_GRID, strip_width, TILE_MODE, M_TOTAL,
-    BPRIME_OPTIMIZE_OVERLAP, BPRIME_OVERLAP_KEEP_RATIO, BPRIME_CORE_OVERLAP,
+    BPRIME_OPTIMIZE_OVERLAP, BPRIME_OVERLAP_KEEP_RATIO,
+    STRIP_MOVE_P, Input
 )
 from src.io.loader import load_barseq
 from src.subsampling.kmeans import kmeans_subsample
@@ -17,7 +18,7 @@ from src.optim.LBFGS import optimize_lbfgs, optimize_lbfgs_joint
 from src.optim.Adam import optimize_adam, optimize_adam_joint
 from src.losses.varifold import varifold_sp, varifold_sp_anisotropic
 from src.io.vtk_export import export_orig_vtp, export_hat_vtp
-from src.preprocessing.tiling import split_slice_grid
+from src.preprocessing.tiling import split_slice_grid, strip_geometry
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -26,18 +27,20 @@ print(f"Tiling: {N_GRID}x{N_GRID}, strip_width={strip_width}, mode={TILE_MODE}")
 
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #DATA_FILE  = os.path.join(BASE_DIR, "data", "BARSeq", "npz_slices", "slice_10.npz")
-DATA_FILE  = os.path.join(BASE_DIR, "data", "BARSeq", "MB35_BL2_L20_11.npz")
+VTK_FILE = os.path.join(BASE_DIR, "data", "BARSeq", Input)
+#DATA_FILE  = os.path.join(BASE_DIR, "data", "BARSeq", ".npz")
 OUTPUT_DIR = os.path.join(BASE_DIR, "data", "BARSeq", "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ── Load + tile ────────────────────────────────────────
-X_orig, P_orig, W_orig, P_norm_orig, X_min, X_max = load_barseq(DATA_FILE, device)
+X_orig, P_orig, W_orig, P_norm_orig, X_min, X_max = load_barseq(VTK_FILE, device)
 del W_orig, P_norm_orig
 if device.type == "cuda":
     torch.cuda.empty_cache()
 regions = split_slice_grid(X_orig, P_orig, n=N_GRID,
                            strip_width=strip_width, mode=TILE_MODE)
 IS_BPRIME = (TILE_MODE == "blocks_and_overlaps")
+IS_BSTRIP = (TILE_MODE == "blocks_and_strips")
 
 
 def make_varifold_fn(M_region):
@@ -112,6 +115,57 @@ def optimize_measure(S_target, M_r, init=None):
     return Xh.detach(), Ph.detach()
 
 
+def refine_strip(S_target, X_mov, P_mov, alpha):
+    """
+    Smooth blend between the block optimum and a free strip re-optimization.
+
+    X_mov/P_mov (= mu_hat) are the optimized-block points inside the seam band. They are
+    re-optimized *freely* against the original data S_target in the same band to get
+    mu_tilde (edges free too — continuity is handled by the blend, not by freezing), then
+    interpolated per point:
+
+        X#  =  X_hat + rho * (X_tilde - X_hat)
+
+    with rho = `alpha`, the hat weight: rho=0 at the strip edges keeps the block optimum
+    (stable interior of the block), rho=1 at the seam centre adopts the strip optimum
+    (fixes the block-to-block junction). Features are blended the same way when
+    STRIP_MOVE_P, otherwise kept at P_hat.
+    """
+    if X_mov.shape[0] == 0 or S_target[0].shape[0] == 0:
+        return X_mov.detach(), P_mov.detach()
+
+    X_hat = X_mov.detach().clone()          # mu_hat: block optimum (blend baseline)
+    P_hat = P_mov.detach().clone()
+
+    # mu_tilde: free re-optimization of the same points (same count/order → 1:1 blend).
+    X_t = X_hat.clone().requires_grad_(True)
+    P_t = P_hat.clone().requires_grad_(STRIP_MOVE_P)
+    vf = make_varifold_fn(X_mov.shape[0])
+
+    if OPTIMIZER == "lbfgs":
+        X_t, P_t, _, _ = optimize_lbfgs(
+            S_target, X_t, P_t, vf,
+            lr=LR, max_iter=MAX_ITER, history_size=HISTORY_SIZE,
+            epochs=EPOCHS, tol=TOL, patience=PATIENCE,
+        )
+    elif OPTIMIZER == "adam":
+        X_t, P_t, _, _ = optimize_adam(
+            S_target, X_t, P_t, vf,
+            lr_X=ADAM_LR_X, lr_P=ADAM_LR_P,
+            epochs=ADAM_EPOCHS, tol=ADAM_TOL, patience=ADAM_PATIENCE,
+        )
+    else:
+        raise ValueError(f"Unknown OPTIMIZER: '{OPTIMIZER}'.")
+
+    rho = alpha.detach().view(-1, 1)                       # (M,1), in [0,1]
+    X_sharp = X_hat + rho * (X_t.detach() - X_hat)         # X# = X_hat + rho*(X_tilde-X_hat)
+    if STRIP_MOVE_P:
+        P_sharp = (P_hat + rho * (P_t.detach() - P_hat)).clamp(min=0.0)
+    else:
+        P_sharp = P_hat
+    return X_sharp.detach(), P_sharp.detach()
+
+
 # ── Per-region reduction ───────────────────────────────
 X_hat_list, P_hat_list, region_ids = [], [], []
 t_start = time.time()
@@ -142,9 +196,8 @@ if IS_BPRIME:
             region_ids.append(torch.full((Xh.shape[0],), region["block_id"], dtype=torch.int32))
 
     if BPRIME_OPTIMIZE_OVERLAP:
-        core_bounds_key = "bounds" if BPRIME_CORE_OVERLAP else "core_bounds"
         for region in blocks:
-            Xh, Ph = slice_measure(expanded_hat[region["block_id"]], region[core_bounds_key])
+            Xh, Ph = slice_measure(expanded_hat[region["block_id"]], region["bounds"])
             print(f"[B' core]     {region['name']:15s} from expanded M={Xh.shape[0]}")
             if Xh.shape[0] == 0:
                 continue
@@ -191,6 +244,82 @@ if IS_BPRIME:
             X_hat_list.append(Xh.detach())
             P_hat_list.append(Ph.detach())
             region_ids.append(torch.full((Xh.shape[0],), len(blocks) + rid, dtype=torch.int32))
+elif IS_BSTRIP:
+    # Plan B (revised): optimize the block partition first, then carve thin seam bands out
+    # of that optimized cloud and re-optimize them against the ORIGINAL data with the block
+    # junctions frozen (hat weight). Blocks-minus-seams and refined seams are complementary,
+    # so the merge is non-overlapping and point-count-preserving.
+    geom = strip_geometry(N_GRID, strip_width=strip_width)
+    vlines = torch.tensor(geom["vlines"], device=X_orig.device)
+    hlines = torch.tensor(geom["hlines"], device=X_orig.device)
+    h = geom["h"]
+
+    def nearest_line(coord, lines):
+        d = (coord[:, None] - lines[None, :]).abs()
+        md, mi = d.min(dim=1)
+        return md, mi
+
+    # 1) optimize each block (full partition), same budget split as blocks_only.
+    counts = [r["n"] for r in regions]
+    total_n = sum(counts)
+    M_alloc = [max(1, min(round(M_TOTAL * c / total_n), c)) for c in counts]
+    Xb_list, Pb_list = [], []
+    for region, M_r in zip(regions, M_alloc):
+        Xs, Ps = region_measure(region)
+        print(f"[B block]    {region['name']:15s} N={region['n']:6d} M={M_r}")
+        Xh, Ph = optimize_measure((Xs, Ps), M_r)
+        Xb_list.append(Xh.detach())
+        Pb_list.append(Ph.detach())
+    Xb = torch.cat(Xb_list, dim=0)
+    Pb = torch.cat(Pb_list, dim=0)
+
+    # 2) classify optimized block points: core (fixed) vs vstrip vs hstrip (vstrip owns
+    #    the crossings, so hstrip excludes the vertical-seam neighbourhood).
+    dv, iv = nearest_line(Xb[:, 0], vlines)
+    dh, ih = nearest_line(Xb[:, 1], hlines)
+    near_v, near_h = dv <= h, dh <= h
+    core = ~near_v & ~near_h
+
+    # original data, classified the same way (targets for the strip refinement).
+    dvo, ivo = nearest_line(X_orig[:, 0], vlines)
+    dho, iho = nearest_line(X_orig[:, 1], hlines)
+    near_vo, near_ho = dvo <= h, dho <= h
+
+    next_id = 0
+    def emit(Xh, Ph):
+        global next_id
+        if Xh.shape[0] == 0:
+            return
+        X_hat_list.append(Xh.detach())
+        P_hat_list.append(Ph.detach())
+        region_ids.append(torch.full((Xh.shape[0],), next_id, dtype=torch.int32))
+        next_id += 1
+
+    # 3a) core: block optimum kept verbatim.
+    print(f"[B core]     N={int(core.sum())}")
+    emit(Xb[core], Pb[core])
+
+    # 3b) vertical seams (own the crossings).
+    for i in range(vlines.shape[0]):
+        mov = near_v & (iv == i)
+        tgt = near_vo & (ivo == i)
+        if mov.sum() == 0:
+            continue
+        Xm, Pm = Xb[mov], Pb[mov]
+        alpha = (1.0 - (Xm[:, 0] - vlines[i]).abs() / h).clamp(0.0, 1.0)
+        print(f"[B vstrip{i:2d}] mov={int(mov.sum()):5d} tgt={int(tgt.sum()):6d}")
+        emit(*refine_strip((X_orig[tgt], P_orig[tgt]), Xm, Pm, alpha))
+
+    # 3c) horizontal seams (clipped away from the vertical seams).
+    for j in range(hlines.shape[0]):
+        mov = near_h & ~near_v & (ih == j)
+        tgt = near_ho & ~near_vo & (iho == j)
+        if mov.sum() == 0:
+            continue
+        Xm, Pm = Xb[mov], Pb[mov]
+        alpha = (1.0 - (Xm[:, 1] - hlines[j]).abs() / h).clamp(0.0, 1.0)
+        print(f"[B hstrip{j:2d}] mov={int(mov.sum()):5d} tgt={int(tgt.sum()):6d}")
+        emit(*refine_strip((X_orig[tgt], P_orig[tgt]), Xm, Pm, alpha))
 else:
     counts = [r["X"].shape[0] for r in regions]
     total_n = sum(counts)
