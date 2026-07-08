@@ -21,7 +21,6 @@ def load_barseq(filepath: str, device: torch.device):
     elif filepath.endswith(".vtk") or filepath.endswith(".vtp"):
         print("Loading .vtk/.vtp file...")
         mesh = pv.read(filepath)
-        print(mesh)
 
         Position_BarSeq = mesh.points
 

@@ -31,7 +31,8 @@ def split_slice_grid(X, P, n=4, strip_width=0.04, bounds=None, mode="blocks_only
     x = X[:, 0].detach().cpu().contiguous()
     y = X[:, 1].detach().cpu().contiguous()
     xb, yb = ((0.0, 1.0), (0.0, 1.0)) if bounds is None else bounds
-    keep_data = mode != "blocks_and_overlaps"
+    # blocks_and_strips reads its blocks via idx (region_measure), so no per-block copy needed.
+    keep_data = mode not in ("blocks_and_overlaps", "blocks_and_strips")
 
     regions = []
 

@@ -33,7 +33,9 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "data", "BARSeq", "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ── Load + tile ────────────────────────────────────────
-X_orig, P_orig, W_orig, P_norm_orig, X_min, X_max = load_barseq(VTK_FILE, device)
+# Keep the (large) original cloud resident on CPU — P_orig is (N, 39) and on its own
+# nearly fills a small GPU. Only per-region / per-strip subsets are moved to `device`.
+X_orig, P_orig, W_orig, P_norm_orig, X_min, X_max = load_barseq(VTK_FILE, torch.device("cpu"))
 del W_orig, P_norm_orig
 if device.type == "cuda":
     torch.cuda.empty_cache()
@@ -43,9 +45,10 @@ IS_BPRIME = (TILE_MODE == "blocks_and_overlaps")
 IS_BSTRIP = (TILE_MODE == "blocks_and_strips")
 
 
-def make_varifold_fn(M_region):
+def make_varifold_fn(Mr):
     if KERNEL_TYPE == "isotropic":
-        bw = BASE_SIGMA * (1.0 / max(M_region, 1)) ** (1.0 / 3.0)
+        #bw = BASE_SIGMA * (1.0 / max(M_TOTAL, 1)) ** (1.0 / 3.0)
+        bw = BASE_SIGMA
         return lambda S1, S2: varifold_sp(S1, S2, bw)
     elif KERNEL_TYPE == "anisotropic":
         return lambda S1, S2: varifold_sp_anisotropic(S1, S2, SIGMA_XY, SIGMA_Z)
@@ -53,8 +56,8 @@ def make_varifold_fn(M_region):
 
 
 def region_measure(region):
-    idx = region["idx"].to(X_orig.device)
-    return X_orig[idx], P_orig[idx]
+    idx = region["idx"]
+    return X_orig[idx].to(device), P_orig[idx].to(device)
 
 
 def slice_measure(S, bounds, orientation=None, seam=None, k=1):
@@ -250,14 +253,19 @@ elif IS_BSTRIP:
     # junctions frozen (hat weight). Blocks-minus-seams and refined seams are complementary,
     # so the merge is non-overlapping and point-count-preserving.
     geom = strip_geometry(N_GRID, strip_width=strip_width)
-    vlines = torch.tensor(geom["vlines"], device=X_orig.device)
-    hlines = torch.tensor(geom["hlines"], device=X_orig.device)
     h = geom["h"]
+    # Lines live on two devices: GPU copy classifies the (small) optimized block cloud;
+    # CPU copy classifies the (large) original cloud without moving it to the GPU.
+    vlines_g = torch.tensor(geom["vlines"], device=device)
+    hlines_g = torch.tensor(geom["hlines"], device=device)
+    vlines_c = vlines_g.cpu()
+    hlines_c = hlines_g.cpu()
 
     def nearest_line(coord, lines):
-        d = (coord[:, None] - lines[None, :]).abs()
-        md, mi = d.min(dim=1)
-        return md, mi
+        # Uniform interior grid → nearest line by rounding, no (N, L) temporary.
+        step = (lines[-1] - lines[0]) / (lines.shape[0] - 1) if lines.shape[0] > 1 else 1.0
+        k = torch.round((coord - lines[0]) / step).clamp_(0, lines.shape[0] - 1).long()
+        return (coord - lines[k]).abs(), k
 
     # 1) optimize each block (full partition), same budget split as blocks_only.
     counts = [r["n"] for r in regions]
@@ -273,17 +281,21 @@ elif IS_BSTRIP:
     Xb = torch.cat(Xb_list, dim=0)
     Pb = torch.cat(Pb_list, dim=0)
 
-    # 2) classify optimized block points: core (fixed) vs vstrip vs hstrip (vstrip owns
-    #    the crossings, so hstrip excludes the vertical-seam neighbourhood).
-    dv, iv = nearest_line(Xb[:, 0], vlines)
-    dh, ih = nearest_line(Xb[:, 1], hlines)
+    # 2) classify optimized block points (on GPU): core (fixed) vs vstrip vs hstrip
+    #    (vstrip owns the crossings, so hstrip excludes the vertical-seam neighbourhood).
+    dv, iv = nearest_line(Xb[:, 0], vlines_g)
+    dh, ih = nearest_line(Xb[:, 1], hlines_g)
     near_v, near_h = dv <= h, dh <= h
     core = ~near_v & ~near_h
 
-    # original data, classified the same way (targets for the strip refinement).
-    dvo, ivo = nearest_line(X_orig[:, 0], vlines)
-    dho, iho = nearest_line(X_orig[:, 1], hlines)
+    # original data, classified the same way but ON CPU (targets for the refinement).
+    dvo, ivo = nearest_line(X_orig[:, 0], vlines_c)
+    dho, iho = nearest_line(X_orig[:, 1], hlines_c)
     near_vo, near_ho = dvo <= h, dho <= h
+
+    def orig_band(mask):
+        # pull one seam band out of the CPU-resident original cloud onto the GPU.
+        return X_orig[mask].to(device), P_orig[mask].to(device)
 
     next_id = 0
     def emit(Xh, Ph):
@@ -300,33 +312,33 @@ elif IS_BSTRIP:
     emit(Xb[core], Pb[core])
 
     # 3b) vertical seams (own the crossings).
-    for i in range(vlines.shape[0]):
+    for i in range(vlines_g.shape[0]):
         mov = near_v & (iv == i)
         tgt = near_vo & (ivo == i)
         if mov.sum() == 0:
             continue
         Xm, Pm = Xb[mov], Pb[mov]
-        alpha = (1.0 - (Xm[:, 0] - vlines[i]).abs() / h).clamp(0.0, 1.0)
+        alpha = (1.0 - (Xm[:, 0] - vlines_g[i]).abs() / h).clamp(0.0, 1.0)
         print(f"[B vstrip{i:2d}] mov={int(mov.sum()):5d} tgt={int(tgt.sum()):6d}")
-        emit(*refine_strip((X_orig[tgt], P_orig[tgt]), Xm, Pm, alpha))
+        emit(*refine_strip(orig_band(tgt), Xm, Pm, alpha))
 
     # 3c) horizontal seams (clipped away from the vertical seams).
-    for j in range(hlines.shape[0]):
+    for j in range(hlines_g.shape[0]):
         mov = near_h & ~near_v & (ih == j)
         tgt = near_ho & ~near_vo & (iho == j)
         if mov.sum() == 0:
             continue
         Xm, Pm = Xb[mov], Pb[mov]
-        alpha = (1.0 - (Xm[:, 1] - hlines[j]).abs() / h).clamp(0.0, 1.0)
+        alpha = (1.0 - (Xm[:, 1] - hlines_g[j]).abs() / h).clamp(0.0, 1.0)
         print(f"[B hstrip{j:2d}] mov={int(mov.sum()):5d} tgt={int(tgt.sum()):6d}")
-        emit(*refine_strip((X_orig[tgt], P_orig[tgt]), Xm, Pm, alpha))
+        emit(*refine_strip(orig_band(tgt), Xm, Pm, alpha))
 else:
     counts = [r["X"].shape[0] for r in regions]
     total_n = sum(counts)
     M_alloc = [max(1, min(round(M_TOTAL * c / total_n), c)) for c in counts]
 
     for rid, (region, M_r) in enumerate(zip(regions, M_alloc)):
-        Xs, Ps = region["X"], region["P"]
+        Xs, Ps = region["X"].to(device), region["P"].to(device)
         print(f"[{rid:2d}] {region['name']:13s} kind={region['kind']:6s} "
               f"N={Xs.shape[0]:6d}  M={M_r}")
 
@@ -338,8 +350,9 @@ else:
 total_time = time.time() - t_start
 print(f"Total reduction time      : {total_time:.2f} s")
 # ── Merge ──────────────────────────────────────────────
-X_hat_all = torch.cat(X_hat_list, dim=0)
-P_hat_all = torch.cat(P_hat_list, dim=0)
+# back to CPU to match the CPU-resident X_min/X_max used by the exporters.
+X_hat_all = torch.cat(X_hat_list, dim=0).cpu()
+P_hat_all = torch.cat(P_hat_list, dim=0).cpu()
 print(f"Total representative points after tiling: {X_hat_all.shape[0]} "
       f"(orig {X_orig.shape[0]})")
 
