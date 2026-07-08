@@ -9,7 +9,7 @@ from src.config import (
     ADAM_LR_X, ADAM_LR_P, ADAM_EPOCHS, ADAM_TOL, ADAM_PATIENCE,
     N_GRID, strip_width, TILE_MODE, M_TOTAL,
     BPRIME_OPTIMIZE_OVERLAP, BPRIME_OVERLAP_KEEP_RATIO,
-    STRIP_MOVE_P, Input
+    STRIP_MOVE_P, EXPAND_HALO, Input
 )
 from src.io.loader import load_barseq
 from src.subsampling.kmeans import kmeans_subsample
@@ -40,9 +40,10 @@ del W_orig, P_norm_orig
 if device.type == "cuda":
     torch.cuda.empty_cache()
 regions = split_slice_grid(X_orig, P_orig, n=N_GRID,
-                           strip_width=strip_width, mode=TILE_MODE)
+                           strip_width=strip_width, mode=TILE_MODE, halo=EXPAND_HALO)
 IS_BPRIME = (TILE_MODE == "blocks_and_overlaps")
 IS_BSTRIP = (TILE_MODE == "blocks_and_strips")
+IS_BEXP   = (TILE_MODE == "blocks_expanded")
 
 
 def make_varifold_fn(Mr):
@@ -332,6 +333,42 @@ elif IS_BSTRIP:
         alpha = (1.0 - (Xm[:, 1] - hlines_g[j]).abs() / h).clamp(0.0, 1.0)
         print(f"[B hstrip{j:2d}] mov={int(mov.sum()):5d} tgt={int(tgt.sum()):6d}")
         emit(*refine_strip(orig_band(tgt), Xm, Pm, alpha))
+elif IS_BEXP:
+    # Plan C: optimize each block WITH a halo of surrounding context, then slice the optimized
+    # cloud back to the true (original) block bounds and merge. Non-overlapping cores; the halo
+    # removes the kernel edge-deficit so adjacent cores meet at the seam without holes.
+    blocks = {r["block_id"]: r for r in regions if r["kind"] == "block"}
+    expanded = [r for r in regions if r["kind"] == "expanded"]
+    total_core = sum(r["n"] for r in blocks.values())
+
+    def slice_to_core(X, P, bounds, r, c):
+        # Half-open just like the block partition → cores tile the domain with no overlap/gap.
+        x0, x1, y0, y1 = bounds
+        mx = (X[:, 0] >= x0) & ((X[:, 0] <= x1) if c == N_GRID - 1 else (X[:, 0] < x1))
+        my = (X[:, 1] >= y0) & ((X[:, 1] <= y1) if r == N_GRID - 1 else (X[:, 1] < y1))
+        m = mx & my
+        return X[m], P[m]
+
+    for region in expanded:
+        bid = region["block_id"]
+        core = blocks.get(bid)          # missing → true block cell has no original points
+        exp_n = region["n"]
+        if core is None or exp_n == 0:
+            continue                     # its halo mass is represented by neighbouring cores
+        core_n = core["n"]
+        # Budget the expanded optimization so the sliced-back core ≈ its fair share of M_TOTAL:
+        # optimize M_exp points over the expanded region, keep ~core/exp of them after slicing.
+        M_core = max(1, round(M_TOTAL * core_n / max(total_core, 1)))
+        M_r = max(1, min(round(M_core * exp_n / max(core_n, 1)), exp_n))
+        Xs, Ps = region_measure(region)
+        print(f"[C expand]  {region['name']:15s} exp_N={exp_n:6d} M={M_r} core_N={core_n}")
+        Xh, Ph = optimize_measure((Xs, Ps), M_r)
+        Xc, Pc = slice_to_core(Xh.detach(), Ph.detach(), region["bounds"], region["r"], region["c"])
+        if Xc.shape[0] == 0:
+            continue
+        X_hat_list.append(Xc)
+        P_hat_list.append(Pc)
+        region_ids.append(torch.full((Xc.shape[0],), bid, dtype=torch.int32))
 else:
     counts = [r["X"].shape[0] for r in regions]
     total_n = sum(counts)

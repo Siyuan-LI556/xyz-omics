@@ -26,13 +26,13 @@ def strip_geometry(n, strip_width=0.04, bounds=None):
     }
 
 
-def split_slice_grid(X, P, n=4, strip_width=0.04, bounds=None, mode="blocks_only"):
+def split_slice_grid(X, P, n=4, strip_width=0.04, bounds=None, mode="blocks_only", halo=0.02):
 
     x = X[:, 0].detach().cpu().contiguous()
     y = X[:, 1].detach().cpu().contiguous()
     xb, yb = ((0.0, 1.0), (0.0, 1.0)) if bounds is None else bounds
-    # blocks_and_strips reads its blocks via idx (region_measure), so no per-block copy needed.
-    keep_data = mode not in ("blocks_and_overlaps", "blocks_and_strips")
+    # These modes read their regions via idx (region_measure), so no per-block copy needed.
+    keep_data = mode not in ("blocks_and_overlaps", "blocks_and_strips", "blocks_expanded")
 
     regions = []
 
@@ -79,6 +79,25 @@ def split_slice_grid(X, P, n=4, strip_width=0.04, bounds=None, mode="blocks_only
         for r in range(n):
             for c in range(n):
                 add(f"block_r{r}_c{c}", "block", row_masks[r] & col_masks[c])
+        return regions
+
+    # plan C, expanded blocks only (extends B' without the overlap seam step):
+    # optimize each block together with a halo of surrounding context, then slice the
+    # optimized cloud back to the TRUE block bounds and merge. The halo cancels the kernel
+    # edge-deficit, so adjacent cores meet at the seam without holes.
+    if mode == "blocks_expanded":
+        rect = lambda x0, x1, y0, y1: (x >= x0) & (x <= x1) & (y >= y0) & (y <= y1)
+        for r in range(n):
+            for c in range(n):
+                bid = r * n + c
+                core_bounds = (ex[c], ex[c + 1], ey[r], ey[r + 1])
+                add(f"block_r{r}_c{c}", "block", row_masks[r] & col_masks[c],
+                    block_id=bid, r=r, c=c, bounds=core_bounds)
+
+                x0, x1 = max(xb[0], ex[c] - halo), min(xb[1], ex[c + 1] + halo)
+                y0, y1 = max(yb[0], ey[r] - halo), min(yb[1], ey[r + 1] + halo)
+                add(f"expanded_r{r}_c{c}", "expanded", rect(x0, x1, y0, y1),
+                    block_id=bid, r=r, c=c, bounds=core_bounds)  # bounds = TRUE block, for slicing
         return regions
 
     # plan B', expanded blocks for boundary context + shared pairwise overlaps.
