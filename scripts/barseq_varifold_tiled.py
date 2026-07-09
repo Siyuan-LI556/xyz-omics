@@ -319,7 +319,11 @@ elif IS_BSTRIP:
         if mov.sum() == 0:
             continue
         Xm, Pm = Xb[mov], Pb[mov]
-        alpha = (1.0 - (Xm[:, 0] - vlines_g[i]).abs() / h).clamp(0.0, 1.0)
+
+        a = 0.7
+        t = ((Xm[:, 0] - vlines_g[i]).abs() / h).clamp(0.0, 1.0)
+        alpha = ((1.0 - t) / (1.0 - a)).clamp(0.0, 1.0)
+        #alpha = (1.0 - (Xm[:, 0] - vlines_g[i]).abs() / h).clamp(0.0, 1.0)
         print(f"[B vstrip{i:2d}] mov={int(mov.sum()):5d} tgt={int(tgt.sum()):6d}")
         emit(*refine_strip(orig_band(tgt), Xm, Pm, alpha))
 
@@ -330,7 +334,11 @@ elif IS_BSTRIP:
         if mov.sum() == 0:
             continue
         Xm, Pm = Xb[mov], Pb[mov]
-        alpha = (1.0 - (Xm[:, 1] - hlines_g[j]).abs() / h).clamp(0.0, 1.0)
+
+        a = 0.7
+        t = ((Xm[:, 1] - hlines_g[j]).abs() / h).clamp(0.0, 1.0)
+        alpha = ((1.0 - t) / (1.0 - a)).clamp(0.0, 1.0)
+        #alpha = (1.0 - (Xm[:, 1] - hlines_g[j]).abs() / h).clamp(0.0, 1.0)
         print(f"[B hstrip{j:2d}] mov={int(mov.sum()):5d} tgt={int(tgt.sum()):6d}")
         emit(*refine_strip(orig_band(tgt), Xm, Pm, alpha))
 elif IS_BEXP:

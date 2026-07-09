@@ -1,5 +1,5 @@
 # ── Experiment identity ────────────────────────────────
-RUN_ID           = 56             # increment for each experiment
+RUN_ID           = 69             # increment for each experiment
 SUBSAMPLE_METHOD = "kmeans"      # "kmeans" | "random"
 KERNEL_TYPE      = "isotropic"   # "isotropic" | "anisotropic"
 OPTIMIZER        = "lbfgs"       # "lbfgs" | "adam"
@@ -9,10 +9,10 @@ Input = "MB35_BL2_L20_11.npz"     # "MB35_BL2_L20_11.npz" | "test_subsample.vtk"
 SUFFIX = f"run{RUN_ID:02d}_{SUBSAMPLE_METHOD}_{KERNEL_TYPE}_{OPTIMIZER}"
 
 # ── Subsampling ────────────────────────────────────────
-M = 500000            # number of representative points
+M = 1000000            # number of representative points
 
 # ── Varifold kernel parameters ─────────────────────────
-BASE_SIGMA = 0.002    # isotropic bandwidth (scaled by M at runtime)
+BASE_SIGMA = 0.001    # isotropic bandwidth (scaled by M at runtime)
 SIGMA_XY   = 0.003   # anisotropic: bandwidth for x/y directions
 SIGMA_Z    = 0.003    # anisotropic: bandwidth for z direction
 
