@@ -69,6 +69,21 @@ def varifold_sp_anisotropic(S1, S2, sigma_xy=0.02, sigma_z=0.1):
     return (K_pos * K_feat).sum(1).sum() / (N * M)
 
 
+def make_varifold_fn(kernel_type, M, sigma, sigma_xy, sigma_z):
+    """
+    Build a varifold callable(S1, S2) -> scalar from the config kernel choice.
+    The caller passes the already-computed isotropic bandwidth `sigma`, so both the
+    tiled pipeline (sigma = BASE_SIGMA) and the plain pipeline (sigma scaled by M)
+    reuse this factory without changing their behaviour.
+    """
+    if kernel_type == "isotropic":
+        sigma = sigma * (1 / M) ** (1 / 3)
+        return lambda S1, S2: varifold_sp(S1, S2, sigma)
+    if kernel_type == "anisotropic":
+        return lambda S1, S2: varifold_sp_anisotropic(S1, S2, sigma_xy, sigma_z)
+    raise ValueError(f"Unknown KERNEL_TYPE: '{kernel_type}'.")
+
+
 if __name__ == "__main__":
     import torch
     x = torch.randn(5, 1, 3)

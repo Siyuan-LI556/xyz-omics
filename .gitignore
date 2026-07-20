@@ -224,6 +224,7 @@ __marimo__/
 BARSEQ - C57BL6J/
 Spark/
 SPARK-X/
+doc/
 
 # Run outputs
 run04_kmeans_anisotropic/
@@ -233,6 +234,7 @@ run04_kmeans_isotropic/
 # Papers / PDFs
 *.pdf
 *.txt
+*.tex
 
 # Optional: local experiment scripts
 scripts/sparkx_barseq/

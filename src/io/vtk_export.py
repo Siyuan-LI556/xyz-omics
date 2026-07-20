@@ -31,7 +31,7 @@ def export_orig_vtp(X_orig, P_orig, X_min, X_max, output_dir):
 
     cloud_orig = pv.PolyData(_to_3d(X_orig_restored))
     cloud_orig.point_data["nu_X"]          = P_np   # raw w_i * p_i  (39-dim vector)
-    cloud_orig.point_data["wi"]            = w ** 1/3      # scalar total expression
+    cloud_orig.point_data["wi"]            = w       # scalar total expression
     cloud_orig.point_data["pi"]            = p       # normalized gene profile (39-dim)
 
     file_orig = os.path.join(output_dir, "orig.vtp")
