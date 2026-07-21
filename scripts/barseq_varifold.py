@@ -51,12 +51,12 @@ torch.save(
     os.path.join(OUTPUT_DIR, f"results_{SUFFIX}.pt"),
 )
 #plot_loss_curve(loss_history, time_history, output_dir=OUTPUT_DIR, suffix=SUFFIX)
-'''
+
 # ── Middle 3 slices comparison ─────────────────────────
 X_mid, P_mid, selected_z, slice_id = load_middle_slices(DATA_FILE, n=3)
-export_middle_slices_vtp(X_mid, P_mid, selected_z, slice_id, OUTPUT_DIR)
-export_hat_middle_slices_vtp(X_hat, P_hat, X_min, X_max, selected_z, OUTPUT_DIR, suffix=SUFFIX)
-'''
+#export_middle_slices_vtp(X_mid, P_mid, selected_z, slice_id, OUTPUT_DIR)
+#export_hat_middle_slices_vtp(X_hat, P_hat, X_min, X_max, selected_z, OUTPUT_DIR, suffix=SUFFIX)
+
 S_full    = (X_orig, P_orig)
 S_hat_all = (X_hat, P_hat)
 with torch.no_grad():
