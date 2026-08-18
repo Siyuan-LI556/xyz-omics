@@ -1,24 +1,34 @@
-import torch
+# scripts/analyse.py
+# Overlay eps(t) comparison curves from the results_*.pt records saved by
+# barseq_varifold.py.
+#
+#   PYTHONPATH=. python scripts/analyse.py [name] [results files...]
+#
+#   name           optional figure name -> output/eps_<name>.png/.pdf
+#   results files  explicit .pt files; if omitted, all results_*.pt in output/
+#
+# Example (5.5.1, after runs 101-106):
+#   PYTHONPATH=. python scripts/analyse.py init \
+#       data/BARSeq/output/results_run10*_*_isotropic_lbfgs.pt
+import glob
 import os
-import matplotlib.pyplot as plt
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.io.plot import plot_eps_comparison
 
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_FILE  = os.path.join(BASE_DIR, "data", "BARSeq", "D076_1L_approx200um.npz")
 OUTPUT_DIR = os.path.join(BASE_DIR, "data", "BARSeq", "output")
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-X_orig,X_hat,P_hat,P_orig, loss_history=torch.load(os.path.join(OUTPUT_DIR, "results.pt",))
-print(P_hat.shape)
+args = sys.argv[1:]
+name = args.pop(0) if args and not args[0].endswith(".pt") else "compare"
+files = sorted(args) or sorted(glob.glob(os.path.join(OUTPUT_DIR, "results_*.pt")))
 
-X_orig_np = X_orig.cpu().numpy()
-X_hat_np  = X_hat.detach().cpu().numpy()
+if not files:
+    sys.exit(f"no results_*.pt found in {OUTPUT_DIR}; run barseq_varifold.py first")
 
-# plot p-hat sum(0）
-plt.figure()
-plt.plot((P_hat.sum(axis=0) /P_hat.sum()).cpu().detach().numpy())
-plt.plot((P_orig.sum(axis=0)/P_orig.sum()).cpu().detach().numpy(),"--")
-plt.show()
-plt.savefig(os.path.join(OUTPUT_DIR, "P_hat.png"))
-plt.figure()
-plt.plot((P_hat.sum(axis=0) /P_hat.sum()-P_orig.sum(axis = 0)/P_orig.sum()).cpu().detach().numpy())
-plt.show()
+print(f"comparing {len(files)} runs -> eps_{name}.png/.pdf")
+for f in files:
+    print(f"  {os.path.basename(f)}")
+plot_eps_comparison(files, output_dir=OUTPUT_DIR, name=name)

@@ -4,6 +4,7 @@ import time
 
 import torch
 import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader, BatchSampler, RandomSampler
 
 
 def _inverse_softplus(P, floor=1e-8):
@@ -151,3 +152,113 @@ def optimize_adam_joint(S_targets, X_hat, P_hat, varifold_fn, lr_X=0.003, lr_P=0
     return _adam_loop(S_targets, X_hat, P_hat, varifold_fn, lr_X, lr_P, epochs,
                       target_eps, min_epochs, stall_window, stall_tol,
                       softplus_P, lr_decay, tag="Joint Adam")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Algorithm 3 — global mini-batch varifold optimization (no tiling)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class _PointCloud(Dataset):
+    """Indexable point cloud. With DataLoader(batch_size=None) + BatchSampler,
+    __getitem__ receives a whole batch of indices -> one vectorized GPU gather."""
+    def __init__(self, X, P):
+        self.X, self.P = X, P
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.P[idx]
+
+
+def make_loader(X, P, batch_size, seed=42):
+    """Permutation-slice batcher over a GPU-resident cloud. RandomSampler reshuffles
+    each epoch (no-replacement within an epoch); num_workers=0 keeps GPU tensors in
+    process; batch_size=None disables per-sample collation."""
+    ds = _PointCloud(X, P)
+    g = torch.Generator().manual_seed(seed)
+    sampler = BatchSampler(RandomSampler(ds, generator=g),
+                           batch_size=batch_size, drop_last=False)
+    return DataLoader(ds, batch_size=None, sampler=sampler, num_workers=0)
+
+
+def optimize_adam_minibatch(S_full, X_hat, P_hat, varifold_fn, batch_size, epochs,
+                            lr_X=0.0003, lr_P=0.001, eval_every=10, normsq_sub=0,
+                            target_eps=0.0, softplus_P=True, freeze_P=True):
+    """Global mini-batch Adam (Algorithm 3). S_full is the whole (X, P) target."""
+    Xf, Pf = S_full
+    N = Xf.shape[0]
+    device = Xf.device
+    loader = make_loader(Xf, Pf, batch_size)
+    K = len(loader)
+
+    # ||mu||^2 — constant part, only used to scale the relative residual eps.
+    with torch.no_grad():
+        if normsq_sub and normsq_sub < N:
+            idx = torch.randperm(N, device=device)[:normsq_sub]
+            norm_sq = varifold_fn((Xf[idx], Pf[idx]), (Xf[idx], Pf[idx])).item()
+        else:
+            norm_sq = varifold_fn(S_full, S_full).item()
+
+    # P in softplus space (non-negativity built in) unless frozen.
+    train_P = not freeze_P
+    if softplus_P and train_P:
+        theta = _inverse_softplus(P_hat.detach()).requires_grad_(True)
+        P_param, current_P = theta, lambda: F.softplus(theta)
+    else:
+        P_hat.requires_grad_(train_P)
+        P_param, current_P = P_hat, lambda: P_hat
+
+    optimiser = torch.optim.Adam(
+        [{'params': [X_hat], 'lr': lr_X},
+         {'params': [P_param], 'lr': lr_P}],
+        amsgrad=True,
+    )
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, T_max=epochs)
+
+    target_loss = (target_eps ** 2) * norm_sq if target_eps > 0 else -math.inf
+    best_eps, best_X, best_P = math.inf, None, None
+    start_time = time.time()
+    print(f"Starting mini-batch Adam... N={N} M={X_hat.shape[0]} b={batch_size} "
+          f"K={K} epochs={epochs} ||mu||^2={norm_sq:.4e}")
+
+    for epoch in range(epochs):
+        for Xb, Pb in loader:                      # fresh permutation per epoch
+            optimiser.zero_grad()
+            S_hat = (X_hat, current_P())
+            term_hat = varifold_fn(S_hat, S_hat)   # ||mu_hat||^2  (exact, every step)
+            cross = varifold_fn((Xb, Pb), S_hat)   # <mu_B, mu_hat> (unbiased; no N/b)
+            loss = term_hat - 2 * cross            # constant ||mu||^2 dropped
+            loss.backward()
+            optimiser.step()
+            with torch.no_grad():
+                X_hat.clamp_(min=0.0, max=1.0)
+                if train_P and not softplus_P:
+                    P_hat.clamp_(min=0.0)
+        scheduler.step()                           # epoch-level LR anneal (anti-drift)
+
+        if (epoch + 1) % eval_every == 0 or epoch == epochs - 1:
+            with torch.no_grad():                  # full-batch eval drives best/stop
+                S_hat = (X_hat, current_P())
+                dist_sq = (norm_sq + varifold_fn(S_hat, S_hat).item()
+                           - 2 * varifold_fn(S_full, S_hat).item())
+                eps = math.sqrt(max(dist_sq, 0.0) / norm_sq) if norm_sq > 0 else float("nan")
+            print(f"[MB] Epoch {epoch+1:4d}/{epochs} | full rel eps: {eps:.4%} | "
+                  f"lr_X: {scheduler.get_last_lr()[0]:.2e} | {time.time()-start_time:.1f}s")
+            if eps < best_eps:
+                best_eps = eps
+                best_X = X_hat.detach().clone()
+                best_P = current_P().detach().clone()
+            if dist_sq <= target_loss:
+                print(f"[MB] Target reached at epoch {epoch+1} | rel eps: {eps:.4%}")
+                break
+
+    if best_X is not None:
+        with torch.no_grad():
+            X_hat.copy_(best_X)
+        P_out = best_P
+    else:
+        P_out = current_P().detach()
+    print(f"[MB] Done | best rel eps: {best_eps:.4%} | {time.time()-start_time:.1f} s")
+    return X_hat.detach(), P_out.detach()

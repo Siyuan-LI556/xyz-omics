@@ -1,9 +1,10 @@
 # ── Experiment identity ────────────────────────────────
-RUN_ID           = 96            # increment for each experiment
+RUN_ID           = 201            # increment for each experiment
 SUBSAMPLE_METHOD = "kmeans"      # "kmeans" | "random"
 KERNEL_TYPE      = "isotropic"   # "isotropic" | "anisotropic"
-OPTIMIZER        = "adam"       # "lbfgs" | "adam"
-Input = "MB35_BL2_L20_11.npz"     # "MB35_BL2_L20_11.npz" | "test_subsample.vtk"
+OPTIMIZER        = "lbfgs"       # "lbfgs" | "adam"
+Input = "MB35_BL2_L20_11.npz"     # "MB35_BL2_L20_11.npz" | "test_subsample.vtk" |
+                                      # "D076_1L_approx200um" | "all_slices_C57BL6J.npz"
 
 # Derived output suffix — used for all file names, do not edit manually
 SUFFIX = f"run{RUN_ID:02d}_{SUBSAMPLE_METHOD}_{KERNEL_TYPE}_{OPTIMIZER}"
@@ -12,37 +13,45 @@ SUFFIX = f"run{RUN_ID:02d}_{SUBSAMPLE_METHOD}_{KERNEL_TYPE}_{OPTIMIZER}"
 M = 1000000            # number of representative points
 
 # ── Varifold kernel parameters ─────────────────────────
-BASE_SIGMA = 0.15    # isotropic bandwidth (scaled by M at runtime)
-SIGMA_XY   = 0.003   # anisotropic: bandwidth for x/y directions
-SIGMA_Z    = 0.003    # anisotropic: bandwidth for z direction
+BASE_SIGMA = 1    # isotropic bandwidth (scaled by M at runtime)
+SIGMA_XY   = 0.0175   # anisotropic: bandwidth for x/y directions
+SIGMA_Z    = 0.05    # anisotropic: bandwidth for z direction
 
 # ── LBFGS optimizer ────────────────────────────────────
 LR           = 0.1
 MAX_ITER     = 20
 HISTORY_SIZE = 10
-EPOCHS       = 500
+EPOCHS       = 100
 TOL          = 1e-6
 PATIENCE     = 3
 
 # ── Adam optimizer ─────────────────────────────────────
-ADAM_LR_X    = 0.0003
+ADAM_LR_X    = 0.001
 ADAM_LR_P    = 0.001
-ADAM_EPOCHS  = 500
+ADAM_EPOCHS  = 800
 
 # Stopping: target relative residual eps = ||S - S_hat|| / ||S||.
-ADAM_TARGET_EPS  = 0.008  # 0.05 = stop at 5% relative error
+ADAM_TARGET_EPS  = 0.003  # 0.05 = stop at 5% relative error
 ADAM_MIN_EPOCHS  = 300    # no stall test before this
 ADAM_STALL_WINDOW = 50    # stall test compares mean(last 50) vs mean(previous 50)
-ADAM_STALL_TOL   = 1e-4   # minimum relative improvement between those windows
+ADAM_STALL_TOL   = 1e-5   # minimum relative improvement between those windows
 ADAM_SOFTPLUS_P  = True   # parametrize P = softplus(theta) instead of clamping at 0
 
 FREEZE_P = True
 ADAM_LR_DECAY    = True   # halve the learning rates on plateau
 
+# ── Algorithm 3: global mini-batch (no tiling) ─────────
+MB_ENABLE     = False     # route run_optimizer's adam branch to the mini-batch loop
+MB_M          = 100000     # representative points (must be < N; e.g. test N=166815)
+MB_BATCH_SIZE = 100000     # b; K = ceil(N/b)
+MB_EPOCHS     = 200
+MB_EVAL_EVERY = 10        # full-batch eval + best snapshot cadence (epochs)
+MB_NORMSQ_SUB = 200000         # 0 = exact ||mu||^2 (cheap on test); >0 = subsample size
+
 # ── Tiling config ──────────────────────────────────────
 N_GRID      = 10            # n x n blocks
 
-TILE_MODE   = "blocks_and_strips"  # "blocks_only" | "blocks_and_strips" | "blocks_and_overlaps" | "blocks_expanded"
+TILE_MODE   = "blocks_only"  # "blocks_only" | "blocks_and_strips" | "blocks_and_overlaps" | "blocks_expanded"
 M_TOTAL     = M            # global representative-point budget, split across regions
 strip_width = 0.15
 # blocks_and_strips: refine seam bands carved from the optimized block cloud.

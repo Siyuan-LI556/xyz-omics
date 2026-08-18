@@ -39,6 +39,54 @@ def plot_gene_distributions(P_orig, P_hat, gene_names=None, output_dir=None):
         plt.savefig(f"{output_dir}/gene_distributions_random.png", dpi=150)
     plt.show()
 
+_PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
+
+def plot_eps_comparison(result_files, output_dir=None, name="compare", group_key=None):
+    """
+    Overlay eps(t) curves from results_*.pt files saved by barseq_varifold.py.
+    eps(t) = sqrt(loss / ||mu||^2) — both optimizers' loss_history is the full
+    three-term expansion ||mu - mu_hat||^2, so this conversion is exact.
+
+    Curves sharing a group get one colour and one legend entry; groups with
+    several runs (e.g. repeated random-init draws) are drawn as thin lines.
+    group_key: callable(record) -> str, default "method+optimizer".
+    """
+    import torch
+    if group_key is None:
+        group_key = lambda r: f'{r["method"]}+{r["optimizer"]}'
+
+    records = [torch.load(f, weights_only=True) for f in result_files]
+    groups = []
+    for r in records:
+        if group_key(r) not in groups:
+            groups.append(group_key(r))
+    counts = {k: sum(1 for r in records if group_key(r) == k) for k in groups}
+
+    plt.figure(figsize=(6, 4))
+    seen = set()
+    for r in records:
+        k = group_key(r)
+        color = _PALETTE[groups.index(k) % len(_PALETTE)]
+        eps = [max(l, 0.0) ** 0.5 / r["norm_sq"] ** 0.5 for l in r["loss_history"]]
+        repeated = counts[k] > 1
+        label = None if k in seen else (f"{k} ({counts[k]} draws)" if repeated else k)
+        plt.plot(r["time_history"], eps, color=color,
+                 lw=1.2 if repeated else 2.0, alpha=0.5 if repeated else 1.0,
+                 label=label)
+        seen.add(k)
+
+    plt.xlabel("time (s)")
+    plt.ylabel(r"relative residual $\varepsilon$")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.legend(frameon=False)
+    plt.tight_layout()
+    if output_dir:
+        plt.savefig(f"{output_dir}/eps_{name}.png", dpi=300)
+        plt.savefig(f"{output_dir}/eps_{name}.pdf")   # vector version for LaTeX
+    plt.show()
+
+
 def plot_loss_curve(loss_history, time_history, output_dir=None, suffix=""):
     """
     Plot the loss curve of the optimizer.
