@@ -187,7 +187,7 @@ def reduce_blocks_and_overlaps(regions, X_orig, P_orig, device):
             X_src = torch.cat([S[0].detach() for S in (left, right) if S[0].shape[0] > 0], dim=0)
             P_src = torch.cat([S[1].detach() for S in (left, right) if S[0].shape[0] > 0], dim=0)
             Xh, Ph = initial_measure(X_src, P_src, M_r, device)
-            vf = tiled_varifold_fn()
+            vf = tiled_varifold_fn(dim=X_src.shape[1])
             Xh, Ph, _, _ = run_optimizer_joint([left, right], Xh, Ph, vf)
 
             emit_region(X_hat_list, P_hat_list, region_ids, Xh, Ph, len(blocks) + rid)

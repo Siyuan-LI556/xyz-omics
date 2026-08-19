@@ -1,16 +1,16 @@
 # ── Experiment identity ────────────────────────────────
-RUN_ID           = 201            # increment for each experiment
+RUN_ID           = 202            # increment for each experiment
 SUBSAMPLE_METHOD = "kmeans"      # "kmeans" | "random"
 KERNEL_TYPE      = "isotropic"   # "isotropic" | "anisotropic"
-OPTIMIZER        = "lbfgs"       # "lbfgs" | "adam"
-Input = "MB35_BL2_L20_11.npz"     # "MB35_BL2_L20_11.npz" | "test_subsample.vtk" |
+OPTIMIZER        = "adam"       # "lbfgs" | "adam"
+Input = "hat_run69_best_performence_of_real_dataset.vtp"     # "MB35_BL2_L20_11.npz" | "test_subsample.vtk" |
                                       # "D076_1L_approx200um" | "all_slices_C57BL6J.npz"
 
 # Derived output suffix — used for all file names, do not edit manually
 SUFFIX = f"run{RUN_ID:02d}_{SUBSAMPLE_METHOD}_{KERNEL_TYPE}_{OPTIMIZER}"
 
 # ── Subsampling ────────────────────────────────────────
-M = 1000000            # number of representative points
+M = 500000            # number of representative points
 
 # ── Varifold kernel parameters ─────────────────────────
 BASE_SIGMA = 1    # isotropic bandwidth (scaled by M at runtime)
@@ -41,12 +41,22 @@ FREEZE_P = True
 ADAM_LR_DECAY    = True   # halve the learning rates on plateau
 
 # ── Algorithm 3: global mini-batch (no tiling) ─────────
+# Cost per optimizer step is (M^2 + b*M) kernel pairs. The exact ||mu_hat||^2 self-term
+# is O(M^2) and mini-batching does NOT reduce it. Measured on this box (Quadro T2000,
+# ~1.9e10 pairs/s fwd+bwd) for MB35 (N=30397307, K=ceil(N/b)=304):
+#     MB_M=1e5 -> ~1.0 s/step, ~5 min/epoch   -> 200 epochs ~= 1 day
+#     MB_M=1e6 -> ~57  s/step, ~4.8 h/epoch   -> 200 epochs ~= 40 days   <-- current
+# M=1e6 needs block-sparse kernels (KeOps `ranges` + grid binning) to be practical.
+# Keep b ~= M: that balances the M^2 self-term against the b*M cross-term.
 MB_ENABLE     = False     # route run_optimizer's adam branch to the mini-batch loop
-MB_M          = 100000     # representative points (must be < N; e.g. test N=166815)
-MB_BATCH_SIZE = 100000     # b; K = ceil(N/b)
+MB_M          = 500000     # representative points (must be < N; MB35 N=30397307)
+MB_BATCH_SIZE = 100000     # b; K = ceil(N/b) = 304 on MB35
 MB_EPOCHS     = 200
 MB_EVAL_EVERY = 10        # full-batch eval + best snapshot cadence (epochs)
-MB_NORMSQ_SUB = 200000         # 0 = exact ||mu||^2 (cheap on test); >0 = subsample size
+# Subsampling ||mu||^2 over-weights the i=j diagonal by N/MB_NORMSQ_SUB, which biases
+# the reported eps (152x at 200k on MB35, 30x at 1M). 0 = exact, unaffordable at N=30M.
+MB_NORMSQ_SUB = 1000000
+MB_EXPORT_ORIG = False    # orig.vtp is dataset-, not run-, dependent; ~1 GB at N=30M
 
 # ── Tiling config ──────────────────────────────────────
 N_GRID      = 10            # n x n blocks

@@ -4,10 +4,14 @@ import torch
 import pyvista as pv
 
 
-def load_barseq(filepath: str, device: torch.device):
+def load_barseq(filepath: str, device: torch.device, return_pnorm: bool = True):
     """
     Load BARSeq data from .npz/.vtk/.vtp file and normalize spatial coordinates to [0, 1] range.
     Returns tensors and normalization parameters for later restoration.
+
+    return_pnorm=False skips building P_norm (an extra N x d tensor on `device`) and
+    returns None in its place. Callers that only need the raw measure (X, P) should pass
+    False: on the 30M-point clouds P_norm alone is ~0.4 GB of otherwise dead VRAM.
     """
 
     if filepath.endswith(".npz"):
@@ -52,7 +56,7 @@ def load_barseq(filepath: str, device: torch.device):
     # w_i : scalar total gene expression per cell, L1 sum over all genes
     # p_i : normalized gene profile, probability vector, sums to 1
     W = P.sum(dim=1)                       # shape (N,)
-    P_norm = P / (W.unsqueeze(1) + 1e-12)  # shape (N, d)
+    P_norm = P / (W.unsqueeze(1) + 1e-12) if return_pnorm else None  # shape (N, d)
 
     print(
         f"w_i  — min={W.min().item():.4f}, "

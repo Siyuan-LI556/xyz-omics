@@ -100,10 +100,11 @@ def split_slice_grid(X, P, n=4, bounds=None):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def tiled_varifold_fn():
-    """Varifold callable for the tiled pipeline (isotropic bandwidth = BASE_SIGMA)."""
-    return make_varifold_fn(config.KERNEL_TYPE, config.M ,config.BASE_SIGMA,
-                            config.SIGMA_XY, config.SIGMA_Z)
+def tiled_varifold_fn(dim=3):
+    """Varifold callable for the tiled pipeline (isotropic bandwidth = BASE_SIGMA).
+    `dim` is the ambient dimension of the positions (X.shape[1])."""
+    return make_varifold_fn(config.KERNEL_TYPE, config.M, config.BASE_SIGMA,
+                            config.SIGMA_XY, config.SIGMA_Z, dim=dim)
 
 
 def alloc_budget(counts, M_total):
@@ -164,7 +165,7 @@ def optimize_measure(S_target, M_r, device, init=None):
         return Xs.detach().clone(), Ps.detach().clone()
 
     Xh, Ph = initial_measure(Xs, Ps, M_r, device, init=init)
-    vf = tiled_varifold_fn()
+    vf = tiled_varifold_fn(dim=Xs.shape[1])
     Xh, Ph, _, _ = run_optimizer(S_target, Xh, Ph, vf)
     return Xh.detach(), Ph.detach()
 
@@ -194,7 +195,7 @@ def refine_strip(S_target, X_mov, P_mov, alpha):
     # mu_tilde: free re-optimization of the same points (same count/order → 1:1 blend).
     X_t = X_hat.clone().requires_grad_(True)
     P_t = P_hat.clone().requires_grad_(config.STRIP_MOVE_P)
-    vf = tiled_varifold_fn()
+    vf = tiled_varifold_fn(dim=X_hat.shape[1])
     X_t, P_t, _, _ = run_optimizer(S_target, X_t, P_t, vf)
 
     rho = alpha.detach().view(-1, 1)                       # (M,1), in [0,1]

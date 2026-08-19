@@ -4,7 +4,14 @@ from .Adam import optimize_adam, optimize_adam_joint, optimize_adam_minibatch
 
 
 def run_optimizer(S, X_hat, P_hat, varifold_fn):
-    """Optimize one measure against target S using the configured optimizer."""
+    """Optimize one measure against target S using the configured optimizer.
+
+    Returns (X_hat, P_hat, history, time_history). NOTE: `history` is the per-epoch
+    loss ||mu - mu_hat||^2 for the lbfgs/adam branches, but the mini-batch branch
+    (MB_ENABLE) reports the relative residual eps(t) sampled at MB_EVAL_EVERY instead --
+    its per-step loss is a batch estimate with the constant ||mu||^2 dropped, so it is
+    not on the same scale. Callers that persist the curve must key it accordingly.
+    """
     if config.OPTIMIZER == "lbfgs":
         return optimize_lbfgs(
             S, X_hat, P_hat, varifold_fn,
@@ -13,7 +20,7 @@ def run_optimizer(S, X_hat, P_hat, varifold_fn):
         )
     if config.OPTIMIZER == "adam":
         if getattr(config, "MB_ENABLE", False):
-            X_hat, P_hat = optimize_adam_minibatch(
+            return optimize_adam_minibatch(
                 S, X_hat, P_hat, varifold_fn,
                 batch_size=config.MB_BATCH_SIZE, epochs=config.MB_EPOCHS,
                 lr_X=config.ADAM_LR_X, lr_P=config.ADAM_LR_P,
@@ -21,7 +28,6 @@ def run_optimizer(S, X_hat, P_hat, varifold_fn):
                 target_eps=config.ADAM_TARGET_EPS, softplus_P=config.ADAM_SOFTPLUS_P,
                 freeze_P=config.FREEZE_P,
             )
-            return X_hat, P_hat, [], []
         return optimize_adam(
             S, X_hat, P_hat, varifold_fn,
             lr_X=config.ADAM_LR_X, lr_P=config.ADAM_LR_P, epochs=config.ADAM_EPOCHS,

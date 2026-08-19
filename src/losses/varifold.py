@@ -24,8 +24,11 @@ def gaussian_kernel_anisotropic(x_i, x_j, sigma_xy, sigma_z):
 
     return (-dist_sq).exp()
 
-def linear_kernel(p_i, p_j):
-    return (p_i * p_j).sum(-1) / p_i.shape[1]
+def linear_kernel(p_i, p_j, d_feat):
+    """Normalized feature inner product. d_feat must be passed in: p_i is a LazyTensor
+    of shape (N, 1, d_feat), so p_i.shape[1] is 1, not the feature dimension -- reading
+    it off the LazyTensor silently divided by 1 and left the loss d_feat times too big."""
+    return (p_i * p_j).sum(-1) / d_feat
 
 
 def varifold_sp(S1, S2, sigma=1.0):
@@ -42,7 +45,7 @@ def varifold_sp(S1, S2, sigma=1.0):
     p_j = LazyTensor(p2.contiguous().view(1, M, D_feat))
 
     K_pos = gaussian_kernel(x_i, x_j, sigma)
-    K_feat = linear_kernel(p_i, p_j)
+    K_feat = linear_kernel(p_i, p_j, D_feat)
     # Normalize by the product of the number of points to prevent extremely large Loss values
     return (K_pos * K_feat).sum(1).sum() / (N * M)
 
@@ -64,22 +67,36 @@ def varifold_sp_anisotropic(S1, S2, sigma_xy=0.02, sigma_z=0.1):
     #assert sigma_xy == sigma_z
     #assert torch.allclose(K_pos.sum(0), K_pos_is.sum(0))
 
-    K_feat = linear_kernel(p_i , p_j)
+    K_feat = linear_kernel(p_i, p_j, D_feat)
     # Normalize by the product of the number of points to prevent extremely large Loss values
     return (K_pos * K_feat).sum(1).sum() / (N * M)
 
 
-def make_varifold_fn(kernel_type, M, sigma, sigma_xy, sigma_z):
+def isotropic_sigma(base_sigma, M, dim=3):
+    """Bandwidth scaled to the mean spacing of M points filling a unit `dim`-cube:
+    M^(-1/dim). The exponent must follow the ambient dimension -- using 1/3 on the 2D
+    BARSeq clouds makes sigma ~M^(1/6) too wide (10x at M=1e6), which oversmooths the
+    reconstruction and reports an over-optimistic eps."""
+    return base_sigma * (1 / M) ** (1 / dim)
+
+
+def make_varifold_fn(kernel_type, M, sigma, sigma_xy, sigma_z, dim=3):
     """
     Build a varifold callable(S1, S2) -> scalar from the config kernel choice.
     The caller passes the already-computed isotropic bandwidth `sigma`, so both the
     tiled pipeline (sigma = BASE_SIGMA) and the plain pipeline (sigma scaled by M)
     reuse this factory without changing their behaviour.
+
+    `dim` is the ambient dimension of the point positions (X.shape[1]).
     """
     if kernel_type == "isotropic":
-        sigma = sigma * (1 / M) ** (1 / 3)
+        sigma = isotropic_sigma(sigma, M, dim)
         return lambda S1, S2: varifold_sp(S1, S2, sigma)
     if kernel_type == "anisotropic":
+        if dim != 3:
+            raise ValueError(
+                f"KERNEL_TYPE='anisotropic' needs 3D positions (it splits x/y from z), "
+                f"but the data is {dim}D. Use 'isotropic'.")
         return lambda S1, S2: varifold_sp_anisotropic(S1, S2, sigma_xy, sigma_z)
     raise ValueError(f"Unknown KERNEL_TYPE: '{kernel_type}'.")
 
