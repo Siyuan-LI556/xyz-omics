@@ -59,6 +59,12 @@ def _lbfgs_loop(S_targets, X_hat, P_hat, varifold_fn, lr, max_iter, history_size
                 print(f"Early stopping at epoch {epoch+1:3d} | Loss: {loss_history[-1]:.8f} < tol {tol:.2e}")
                 break
 
+    total_time = time.time() - start_time
+    n_epochs = max(len(loss_history), 1)
+    print(f"[{tag}] Total time: {total_time:.1f} s "
+          f"({total_time/60:.1f} min / {total_time/3600:.2f} h) | "
+          f"{len(loss_history)} epochs | {total_time/n_epochs:.1f} s/epoch")
+
     return X_hat, P_hat, loss_history, time_history
 
 

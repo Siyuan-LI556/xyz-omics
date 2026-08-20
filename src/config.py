@@ -1,21 +1,22 @@
 # ── Experiment identity ────────────────────────────────
-RUN_ID           = 202            # increment for each experiment
+RUN_ID           = 207            # increment for each experiment
 SUBSAMPLE_METHOD = "kmeans"      # "kmeans" | "random"
-KERNEL_TYPE      = "isotropic"   # "isotropic" | "anisotropic"
-OPTIMIZER        = "adam"       # "lbfgs" | "adam"
-Input = "hat_run69_best_performence_of_real_dataset.vtp"     # "MB35_BL2_L20_11.npz" | "test_subsample.vtk" |
+KERNEL_TYPE      = "anisotropic"   # "isotropic" | "anisotropic"
+OPTIMIZER        = "lbfgs"       # "lbfgs" | "adam"
+Input = "all_slices_C57BL6J.npz"     # "MB35_BL2_L20_11.npz" | "test_subsample.vtk" |
                                       # "D076_1L_approx200um" | "all_slices_C57BL6J.npz"
 
 # Derived output suffix — used for all file names, do not edit manually
 SUFFIX = f"run{RUN_ID:02d}_{SUBSAMPLE_METHOD}_{KERNEL_TYPE}_{OPTIMIZER}"
 
 # ── Subsampling ────────────────────────────────────────
-M = 500000            # number of representative points
+M = 50000              # number of representative points
+
 
 # ── Varifold kernel parameters ─────────────────────────
 BASE_SIGMA = 1    # isotropic bandwidth (scaled by M at runtime)
-SIGMA_XY   = 0.0175   # anisotropic: bandwidth for x/y directions
-SIGMA_Z    = 0.05    # anisotropic: bandwidth for z direction
+SIGMA_XY   = 0.02   # anisotropic: bandwidth for x/y directions
+SIGMA_Z    = 0.08    # anisotropic: bandwidth for z direction
 
 # ── LBFGS optimizer ────────────────────────────────────
 LR           = 0.1
@@ -59,9 +60,9 @@ MB_NORMSQ_SUB = 1000000
 MB_EXPORT_ORIG = False    # orig.vtp is dataset-, not run-, dependent; ~1 GB at N=30M
 
 # ── Tiling config ──────────────────────────────────────
-N_GRID      = 10            # n x n blocks
+N_GRID      = 3            # n x n blocks
 
-TILE_MODE   = "blocks_only"  # "blocks_only" | "blocks_and_strips" | "blocks_and_overlaps" | "blocks_expanded"
+TILE_MODE   = "blocks_and_strips"  # "blocks_only" | "blocks_and_strips" | "blocks_and_overlaps" | "blocks_expanded"
 M_TOTAL     = M            # global representative-point budget, split across regions
 strip_width = 0.15
 # blocks_and_strips: refine seam bands carved from the optimized block cloud.
