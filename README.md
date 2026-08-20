@@ -18,7 +18,6 @@ src/losses/          varifold loss, isotropic & anisotropic Gaussian kernels
 src/optim/           LBFGS.py, Adam.py (full-batch + mini-batch)
 src/preprocessing/   spatial tiling (blocks, strips, overlaps, halos)
 scripts/             entry points
-doc/                 report, algorithms, run logs
 ```
 
 ## Usage
